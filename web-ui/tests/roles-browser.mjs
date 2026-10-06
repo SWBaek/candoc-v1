@@ -26,6 +26,8 @@ export async function checkRoleUI(browser) {
     await expect(page.getByRole('heading', { name: '영역·큰 역할·소속', exact: true })).toBeVisible(); await page.getByLabel('영역 검수 보기', { exact: true }).selectOption('direct');
     await expect(page.locator('.role-group-summary')).toContainText('전체 4개 / 범위 내 3개 / 선택 3개');
     await expect(page.getByLabel('#/texts/0 일괄 대상', { exact: true })).toBeDisabled();
+    await expect(page.locator('.role-group-summary')).toContainText('페이지 선별에서 제외된 항목 1개');
+    await expect(page.locator('.role-member').filter({ has: page.getByLabel('#/texts/0 일괄 대상', { exact: true }) })).toContainText('페이지 선별에서 제외됨');
     await expect(page.getByLabel('#/texts/0 일괄 대상', { exact: true })).not.toBeChecked();
     await expect(page.getByLabel('#/texts/2 일괄 대상', { exact: true })).toBeChecked();
     await page.getByText('전체 원본 페이지 목록 (4페이지)', { exact: true }).click();

@@ -31,6 +31,8 @@ export async function checkRoleQuestionsUI(browser) {
     await expect(page.locator('.role-question-range')).toContainText('전체 4개 · 범위 내 3개 · 선택 3개');
     await page.getByText('적용 범위·변경 전후·예외 확인', { exact: true }).click();
     await expect(page.getByLabel('#/texts/0 질문 대상', { exact: true })).toBeDisabled();
+    await expect(page.locator('.role-question-range')).toContainText('페이지 선별에서 제외됨 1개');
+    await expect(page.locator('.role-member').filter({ has: page.getByLabel('#/texts/0 질문 대상', { exact: true }) })).toContainText('페이지 선별에서 제외됨');
     await page.getByLabel('#/texts/2 질문 대상', { exact: true }).uncheck();
     await expect(page.getByRole('article', { name: '활성 원본 · #/texts/2', exact: true })).toContainText('원본 3페이지');
     const before = await state(); await page.getByRole('button', { name: '제안 적용', exact: true }).click();
