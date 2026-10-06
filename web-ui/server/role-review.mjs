@@ -58,7 +58,7 @@ export function buildRoleSource(document, pageMap) {
   return { items, groups, itemMap: new Map(items.map(item => [item.ref, item])), targets: [...nodes].map(([ref, node]) => ({ ref, label: node.label ?? ref, parentRef: node.parent?.$ref ?? '', pages: pagesOf(ref) })) };
 }
 
-export function createRoleStore({ db, reviewId, source, now, fail }) {
+export function createRoleStore({ db, reviewId, source, now, fail, onChange = () => {} }) {
   db.exec(`CREATE TABLE IF NOT EXISTS role_reviews (
     review_id INTEGER NOT NULL REFERENCES reviews(id), element_ref TEXT NOT NULL,
     status TEXT NOT NULL CHECK(status IN ('normal','error','suspected','unjudgeable')),
@@ -133,6 +133,7 @@ export function createRoleStore({ db, reviewId, source, now, fail }) {
     if (changed || before?.needsReview) {
       // Changing an already completed review cannot silently retain its completion.
       markStages([3, 4, 5, 6, 7, 8, 9, 10, 11, 12], item.pages);
+      onChange(item.pages);
     }
   }
   function assertComplete() {
@@ -163,6 +164,7 @@ export function createRoleStore({ db, reviewId, source, now, fail }) {
       });
       db.prepare('UPDATE role_batches SET restored = 1 WHERE id = ?').run(row.id);
       markStages([3, 4, 5, 6, 7, 8, 9, 10, 11, 12], [...new Set(refs.flatMap(ref => data.itemMap.get(ref).pages))]);
+      onChange([...new Set(refs.flatMap(ref => data.itemMap.get(ref).pages))]);
       return;
     }
     if (body.action !== 'save' || !Array.isArray(body.refs) || !body.refs.length || new Set(body.refs).size !== body.refs.length || body.refs.length > data.items.length) fail(400, '일괄 저장할 원본 요소를 중복 없이 선택하세요.');

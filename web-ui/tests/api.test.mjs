@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createReviewApp } from '../server/app.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { fixtureJson } from './local-fixture.mjs';
+import { seedReading } from './fixtures/reading-document.mjs';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const originalPath = fixtureJson;
@@ -34,6 +35,7 @@ test('document information is outside review completion and legacy records survi
   state = (await h.call('/api/review/navigation', { revision: state.revision, stage: 0, selectedPage: state.selectedPage, filter: 'all' })).data;
   assert.equal(state.activeStage, 0);
   state = (await h.call('/api/review/roles', { revision: state.revision, ref: '#/texts/0', status: 'normal', region: 'body', role: 'body', parentRef: '', reason: '두 번째 페이지의 본문 영역과 원본 소속을 확인함', evidence: 'json', followUp: '' })).data;
+  await seedReading(async (endpoint, body) => { const result = await h.call(endpoint, { revision: state.revision, ...body }); if (result.status === 200) state = result.data; return result; }, (await h.call('/api/reading-review')).data);
   for (let id = 3; id < 12; id++) {
     const result = await h.call(`/api/review/stages/${id}`, { revision: state.revision, action: 'complete', note: '수동 검토 범위와 근거' });
     assert.equal(result.status, 200); state = result.data;
@@ -196,6 +198,7 @@ test('completion gates and targeted reinspection after scope change', async t =>
   await decide(3, 'included');
   assert.equal((await stage(2, 'complete')).status, 200);
   assert.equal(state.stages.find(stage => stage.id === 2).status, 'completed');
+  await seedReading(async (endpoint, body) => { const result = await h.call(endpoint, { revision: state.revision, ...body }); if (result.status === 200) state = result.data; return result; }, (await h.call('/api/reading-review')).data);
   await stage(4, 'complete', '원본 1~3페이지 연결 수동 확인');
   await stage(8, 'complete', '목록 없음 확인');
   await decide(2, 'included', '제외 취소');
@@ -204,6 +207,8 @@ test('completion gates and targeted reinspection after scope change', async t =>
   assert.equal(state.stages.find(stage => stage.id === 8).status, 'completed', 'unrelated list review remains valid');
   assert.deepEqual(state.impacts.find(impact => impact.stage === 4).affectedPages, [1, 2, 3]);
   assert.equal((await stage(12, 'complete', '전체 완료 시도')).status, 400);
+  state = (await h.call('/api/review/roles', { revision: state.revision, ref: '#/texts/0', status: 'normal', region: 'body', role: 'body', parentRef: '', reason: '복구 페이지 영역 확인', evidence: 'json', followUp: '' })).data;
+  await seedReading(async (endpoint, body) => { const result = await h.call(endpoint, { revision: state.revision, ...body }); if (result.status === 200) state = result.data; return result; }, (await h.call('/api/reading-review')).data);
   await stage(4, 'complete', '원본 1~3페이지 변경 후 재검토');
   assert.equal(state.impacts.filter(impact => impact.stage === 4).length, 0);
 });
@@ -214,7 +219,7 @@ test('keep remaining pages and complete atomically preserves explicit decisions 
   state = (await h.call('/api/review/pages', { revision: state.revision, pages: [1, 2], status: 'excluded', reason: '앞부분의 불필요한 페이지', note: '제외 근거 보존', evidence: 'page_image' })).data;
   state = (await h.call('/api/review/pages/3', { revision: state.revision, status: 'included', reason: '명시적인 포함 판단', note: '기존 메모 보존', evidence: 'both' })).data;
   const explicit = state.decisions.slice(0, 3);
-  state = (await h.call('/api/review/stages/4', { revision: state.revision, action: 'complete', note: '페이지 연결 검토 근거' })).data;
+  state = (await h.call('/api/review/stages/6', { revision: state.revision, action: 'complete', note: '본문 검토 근거' })).data;
   state = (await h.call('/api/review/navigation', { revision: state.revision, stage: 2, selectedPage: 1, selectedPages: [], filter: 'excluded', panelVisible: false })).data;
   const before = state;
   const body = { revision: state.revision, action: 'complete', note: '', includeUnreviewed: true };
@@ -222,7 +227,7 @@ test('keep remaining pages and complete atomically preserves explicit decisions 
   assert.equal(completed.status, 200); state = completed.data;
   assert.equal(state.revision, before.revision + 1, 'inclusion and completion use a single transaction');
   assert.equal(state.stages.find(stage => stage.id === 2).status, 'completed');
-  assert.equal(state.stages.find(stage => stage.id === 4).status, 'needs_review');
+  assert.equal(state.stages.find(stage => stage.id === 6).status, 'needs_review');
   assert.deepEqual(state.decisions.slice(0, 3), explicit, 'existing decisions, reasons, evidence and timestamps remain unchanged');
   assert.equal(state.decisions.filter(page => page.status === 'included').length, 136);
   assert.ok(state.decisions.slice(3).every(page => page.status === 'included' && page.evidence === 'selection' && page.reason.includes('유지하기로 결정')));

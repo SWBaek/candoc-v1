@@ -10,8 +10,12 @@ import { createReviewApp } from '../server/app.mjs';
 import { checkSuggestionUI } from './suggestions-browser.mjs';
 import { fixtureJson, fixtureProject } from './local-fixture.mjs';
 import { checkRoleUI, checkActualRoleLayout } from './roles-browser.mjs';
+import { checkReadingUI, checkActualReadingLayout } from './reading-browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+process.env.CANDOC_BUILD_DIR ??= 'qa/browser-dist';
+assert.notEqual(path.resolve(root, process.env.CANDOC_BUILD_DIR), path.join(root, 'dist'), 'browser tests must not overwrite user server static files');
+await import('../scripts/build.mjs');
 const originalPath = fixtureJson;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const baseline = hash(await readFile(originalPath));
@@ -165,16 +169,16 @@ try {
   await expect(decision.getByText('원본 4페이지', { exact: true })).toBeVisible();
   assert.equal((await state()).decisions.find(item => item.page === 3).note, '저장 후 이동 동작 확인');
 
-  await stageButton(4).click();
+  await stageButton(6).click();
   await page.locator('#stage-note').fill('브라우저 테스트: 영역과 역할 확인의 수동 검토 근거');
   await page.getByRole('button', { name: '수동 검토 완료 기록', exact: true }).click();
-  await expect(stageButton(4)).toHaveClass(/step-completed/);
+  await expect(stageButton(6)).toHaveClass(/step-completed/);
   await stageButton(5).click();
   await expect(stageButton(5)).toHaveClass(/step-current/);
   await expect(stageButton(5)).not.toHaveClass(/step-completed/);
   await page.reload();
   await expect(stageButton(5)).toHaveClass(/step-current/);
-  await expect(stageButton(4)).toHaveClass(/step-completed/);
+  await expect(stageButton(6)).toHaveClass(/step-completed/);
 
   await page.goto('about:blank');
   await app.close();
@@ -182,8 +186,8 @@ try {
   await new Promise(resolve => app.server.listen(port, '127.0.0.1', resolve));
   await page.goto(url);
   await expect(stageButton(5)).toHaveClass(/step-current/);
-  await expect(stageButton(4)).toHaveClass(/step-completed/);
-  await stageButton(4).click();
+  await expect(stageButton(6)).toHaveClass(/step-completed/);
+  await stageButton(6).click();
   await expect(page.locator('#stage-note')).toHaveValue('브라우저 테스트: 영역과 역할 확인의 수동 검토 근거');
   await stageButton(2).click();
   await tile(1, '제외').click();
@@ -426,6 +430,8 @@ try {
   await checkSuggestionUI(browser);
   await checkRoleUI(browser);
   await checkActualRoleLayout(browser);
+  await checkReadingUI(browser);
+  await checkActualReadingLayout(browser);
   assert.deepEqual(errors, []);
   assert.equal(hash(await readFile(originalPath)), baseline);
   console.log('Browser checks passed: document info without completion or notes, 11 review steps, schema/converter versions distinguished, unverified version and missing-image guidance, document-info mobile/dark layouts, unusable input error screen without DB writes, readable text contrast, shared control sizes, collapsed mobile process, keep remaining pages and finish, exclusion stamps/restoration, pending gate, reload/restart persistence, independent toggles, additive Shift range, all 138 pages, 40-page bulk decisions, filtering, zoom, drafts, source image/text, hidden panel, double-click, 1512/1024/375/320px, theme persistence. Test DB was isolated from project review records.');

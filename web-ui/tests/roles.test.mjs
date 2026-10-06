@@ -107,7 +107,7 @@ test('self/cyclic parent, absent evidence and incomplete judgments never save, a
   await h.put('/api/review/roles', { ref: '#/groups/0', ...judgment, parentRef: '#/groups/1' });
   assert.equal((await h.put('/api/review/roles', { ref: '#/groups/1', ...judgment, parentRef: '#/groups/0' })).status, 400);
   assert.equal((await h.put('/api/review/roles', { ref: '#/texts/8', ...judgment, evidence: 'both' })).status, 400);
-  await h.put('/api/review/stages/4', { action: 'complete', note: '기존 독립 수동 검수 결과' });
+  await h.put('/api/review/stages/6', { action: 'complete', note: '기존 독립 수동 검수 결과' });
   await h.put('/api/review/roles', { ref: '#/texts/0', ...judgment });
-  assert.equal((await h.state()).stages.find(stage => stage.id === 4).status, 'needs_review');
+  assert.equal((await h.state()).stages.find(stage => stage.id === 6).status, 'needs_review');
 });
