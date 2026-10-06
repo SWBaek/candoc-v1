@@ -9,6 +9,7 @@ import { createReviewApp } from '../server/app.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { fixtureJson } from './local-fixture.mjs';
 import { seedReading } from './fixtures/reading-document.mjs';
+import { seedOutline } from './fixtures/heading-document.mjs';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const originalPath = fixtureJson;
@@ -36,6 +37,7 @@ test('document information is outside review completion and legacy records survi
   assert.equal(state.activeStage, 0);
   state = (await h.call('/api/review/roles', { revision: state.revision, ref: '#/texts/0', status: 'normal', region: 'body', role: 'body', parentRef: '', reason: '두 번째 페이지의 본문 영역과 원본 소속을 확인함', evidence: 'json', followUp: '' })).data;
   await seedReading(async (endpoint, body) => { const result = await h.call(endpoint, { revision: state.revision, ...body }); if (result.status === 200) state = result.data; return result; }, (await h.call('/api/reading-review')).data);
+  await seedOutline(async (endpoint, body) => { const result = await h.call(endpoint, { revision: state.revision, ...body }); if (result.status === 200) state = result.data; return result; }, (await h.call('/api/heading-review')).data);
   for (let id = 3; id < 12; id++) {
     const result = await h.call(`/api/review/stages/${id}`, { revision: state.revision, action: 'complete', note: '수동 검토 범위와 근거' });
     assert.equal(result.status, 200); state = result.data;

@@ -1,0 +1,1 @@
+export function validateHeadingForest(rows: Array<{ ref: string; isHeading: boolean | null; needsReview?: boolean; position: number; parentRef: string; level: number | null; part: string }>, fail: (status: number, message: string) => never): void;

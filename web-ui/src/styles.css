@@ -338,3 +338,39 @@ h1 { font-size: var(--font-title); line-height: 1.35; font-weight: var(--weight-
 .reading-diagnostics summary { min-height: var(--control-touch); cursor: pointer; display: flex; align-items: center; }
 .reading-diagnostics li { margin: var(--space-3) 0; }
 .reading-review summary { min-height: var(--control-touch); display: flex; align-items: center; cursor: pointer; }
+
+.heading-review, .heading-tree-column, .heading-inspector { min-width: 0; }
+.heading-toolbar, .heading-save-bar, .heading-search { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+.heading-toolbar > span, .heading-selection { font-size: var(--font-label); color: var(--muted); }
+.heading-selection { margin: var(--space-3) 0; }
+.heading-search label { flex: 1; min-width: 140px; }
+.heading-review label { font-size: var(--font-label); }
+.heading-inspector label, .heading-bulk-fields label, .heading-ranges > label:not(.heading-checkbox), .heading-add label { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-3); }
+.heading-review select { width: 100%; min-width: 0; }
+.heading-workbench { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: var(--space-4); }
+.heading-tree { max-height: 65vh; min-height: 180px; overflow: auto; border-top: var(--stroke) solid var(--border); }
+.heading-tree-row { display: flex; align-items: center; gap: var(--space-1); min-height: var(--control-touch); border-bottom: var(--stroke) solid var(--border); padding: var(--space-2) var(--space-1); cursor: pointer; border-radius: var(--radius-small); }
+.heading-tree-row:focus-visible { outline: var(--stroke-selected) solid var(--primary); outline-offset: calc(-1 * var(--stroke-selected)); }
+.heading-selected { background: var(--current); }
+.heading-context .heading-row-text { color: var(--muted); }
+.heading-indent { flex-shrink: 0; }
+.heading-tree-row button { flex: 0 0 var(--control-touch); min-height: var(--control-touch); width: var(--control-touch); }
+.heading-leaf-space { flex: 0 0 var(--space-4); }
+.heading-row-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.heading-row-text strong { font-size: var(--font-body); font-weight: var(--weight-semibold); }
+.heading-row-text small { display: block; font-size: var(--font-caption); color: var(--muted); }
+.heading-row-state { font-size: var(--font-caption); color: var(--warning); flex: 0 0 64px; }
+.heading-inspector, .heading-bulk, .heading-ranges { border: var(--stroke) solid var(--border); border-radius: var(--radius-panel); padding: var(--space-4); background: var(--background); }
+.heading-inspector h2, .heading-bulk h2, .heading-ranges h2 { font-size: var(--font-body); font-weight: var(--weight-semibold); }
+.heading-bulk, .heading-add, .heading-diagnoses, .heading-scope { margin-top: var(--space-4); }
+.heading-review details { font-size: var(--font-label); overflow-wrap: anywhere; }
+.heading-review summary { min-height: var(--control-touch); display: flex; align-items: center; cursor: pointer; }
+.heading-source pre { overflow: auto; max-height: 280px; font-size: var(--font-caption); background: var(--soft); padding: var(--space-3); }
+.heading-range-source pre { overflow: auto; max-height: 360px; font-size: var(--font-caption); background: var(--soft); padding: var(--space-3); }
+.heading-bulk-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.heading-checkbox { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-touch); overflow-wrap: anywhere; }
+.heading-checkbox input, .heading-tree-row input { width: var(--icon-md); height: var(--icon-md); flex-shrink: 0; accent-color: var(--primary); }
+.heading-page-rows { max-height: 340px; overflow: auto; }
+@media (max-width: 1220px) { .heading-workbench { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 630px) { .heading-bulk-fields { grid-template-columns: minmax(0, 1fr); } .heading-row-state { flex-basis: 46px; } .heading-tree-row { flex-wrap: wrap; } .heading-row-text { flex-basis: 140px; } }
+@media (pointer: coarse) { .heading-checkbox input, .heading-tree-row input { width: var(--control-touch); height: var(--control-touch); } }

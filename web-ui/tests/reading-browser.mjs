@@ -11,7 +11,7 @@ import { readingDocument, pixelPng, seedReadingRoles } from './fixtures/reading-
 
 // Only children created here are controlled. They always use a synthetic
 // fixture, an isolated DB, a dynamic port and the explicitly isolated build.
-async function startProcess(projectDir, dbPath) {
+export async function startProcess(projectDir, dbPath) {
   assert.ok(process.env.CANDOC_BUILD_DIR && process.env.CANDOC_BUILD_DIR !== 'dist');
   const moduleUrl = new URL('../server/app.mjs', import.meta.url).href;
   const code = `import { createReviewApp } from ${JSON.stringify(moduleUrl)}; const app = createReviewApp({projectDir:process.argv[1],dbPath:process.argv[2]}); app.server.listen(0,'127.0.0.1',()=>console.log('TEST_URL=http://127.0.0.1:'+app.server.address().port)); process.on('SIGTERM',async()=>{await app.close();process.exit(0)});`;

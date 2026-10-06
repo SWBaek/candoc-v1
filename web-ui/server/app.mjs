@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { extractPageInput, runCodexSuggestions, validateSuggestions } from './codex-suggestions.mjs';
 import { buildRoleSource, createRoleStore } from './role-review.mjs';
 import { createReadingStore } from './reading-review.mjs';
+import { createHeadingStore } from './heading-review.mjs';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspace = path.resolve(appRoot, '..');
@@ -93,7 +94,7 @@ function loadDocument(jsonPath, rulePath) {
   }
   const schemaVersion = typeof document.version === 'string' ? document.version : null;
   const missingImages = pages.filter(page => !page.imageAvailable).map(page => page.number);
-  return { pages, pageMap, assetFiles, elements, stages, roleSource: buildRoleSource(document, pageMap), readingRoots: { '#/body': document.body?.children ?? [], '#/furniture': document.furniture?.children ?? [] }, suggestionInput: extractPageInput(document), sourceHash: hash(bytes), ruleHash: hash(ruleBytes),
+  return { pages, pageMap, assetFiles, elements, stages, roleSource: buildRoleSource(document, pageMap), headingHints: Object.fromEntries((document.texts ?? []).map((item, index) => [`#/texts/${index}`, { level: item.level ?? null, marker: item.marker ?? '' }])), readingRoots: { '#/body': document.body?.children ?? [], '#/furniture': document.furniture?.children ?? [] }, suggestionInput: extractPageInput(document), sourceHash: hash(bytes), ruleHash: hash(ruleBytes),
     metadata: { name: typeof document.name === 'string' ? document.name : path.basename(jsonPath), originalFile: typeof document.origin?.filename === 'string' ? document.origin.filename : null, schemaName: document.schema_name, schemaVersion, converterVersion: null, sourceFile: path.relative(workspace, jsonPath).replaceAll('\\', '/'), ruleVersion: 'v0.1', pageCount: pages.length, textCount: document.texts?.length ?? 0, tableCount: document.tables?.length ?? 0, pictureCount: document.pictures?.length ?? 0,
       input: { readable: true, versionConfirmed: schemaVersion === confirmedSchemaVersion, confirmedSchemaVersion, missingImages } } };
 }
@@ -149,9 +150,10 @@ export function createReviewApp(options = {}) {
   }
   const reviewId = review.id;
   const fail = (status, message) => { throw new RequestError(status, message); };
-  let readingStore;
-  const roleStore = createRoleStore({ db, reviewId, source, now, fail, onChange: pages => readingStore?.invalidatePages(pages) });
-  readingStore = createReadingStore({ db, reviewId, source, roleStore, now, fail });
+  let readingStore, headingStore;
+  const roleStore = createRoleStore({ db, reviewId, source, now, fail, onChange: pages => { readingStore?.invalidatePages(pages); headingStore?.invalidatePages(pages); } });
+  readingStore = createReadingStore({ db, reviewId, source, roleStore, now, fail, onChange: pages => headingStore?.invalidatePages(pages) });
+  headingStore = createHeadingStore({ db, reviewId, source, roleStore, readingStore, now, fail });
   const baseline = new Map([jsonPath, rulePath].map(file => [file, statSync(file)]));
   function assertInputUnchanged() {
     for (const [file, previous] of baseline) {
@@ -167,7 +169,7 @@ export function createReviewApp(options = {}) {
     const decisions = db.prepare('SELECT page_no AS page, status, reason, note, evidence, updated_at AS updatedAt FROM page_decisions WHERE review_id = ? ORDER BY page_no').all(reviewId);
     const impacts = db.prepare('SELECT stage_id AS stage, page_no AS page, affected_pages AS affectedPages, created_at AS createdAt FROM review_impacts WHERE review_id = ? AND resolved_at IS NULL ORDER BY id').all(reviewId).map(impact => ({ ...impact, affectedPages: JSON.parse(impact.affectedPages) }));
     const stages = db.prepare('SELECT stage_id AS id, status, note, completed_at AS completedAt FROM stage_reviews WHERE review_id = ? AND stage_id >= 2 ORDER BY stage_id').all(reviewId).map(stage => ({ ...stage, name: source.stages.find(item => item.id === stage.id).name }));
-    return { revision: state.revision, activeStage: state.active_stage === 1 ? 0 : state.active_stage, selectedPage: state.selected_page, selectedPages: JSON.parse(state.selected_pages), panelVisible: !!state.panel_visible, thumbnailSize: state.thumbnail_size, filter: state.page_filter, updatedAt: state.updated_at, sourceHash: source.sourceHash, decisions, stages, impacts, roleReviews: roleStore.records(), roleCoverage: roleStore.coverage(), roleUndo: roleStore.undo(), ...readingStore.snapshot(), readingCoverage: readingStore.coverage() };
+    return { revision: state.revision, activeStage: state.active_stage === 1 ? 0 : state.active_stage, selectedPage: state.selected_page, selectedPages: JSON.parse(state.selected_pages), panelVisible: !!state.panel_visible, thumbnailSize: state.thumbnail_size, filter: state.page_filter, updatedAt: state.updated_at, sourceHash: source.sourceHash, decisions, stages, impacts, roleReviews: roleStore.records(), roleCoverage: roleStore.coverage(), roleUndo: roleStore.undo(), ...readingStore.snapshot(), readingCoverage: readingStore.coverage(), ...headingStore.records(), headingCoverage: headingStore.coverage(), headingUndo: headingStore.undo() };
   }
   function mutate(body, operation) {
     if (!Number.isInteger(body.revision)) throw new RequestError(400, '검수 기록의 revision이 필요합니다.');
@@ -220,6 +222,7 @@ export function createReviewApp(options = {}) {
       if (old.status !== body.status) {
         roleStore.invalidatePage(page);
         readingStore.invalidatePages([page]);
+        headingStore.invalidatePages([page]);
         scopeImpact(page);
         db.prepare("UPDATE stage_reviews SET status = 'pending', completed_at = NULL WHERE review_id = ? AND stage_id = 2").run(reviewId);
       }
@@ -246,6 +249,11 @@ export function createReviewApp(options = {}) {
       const pathname = new URL(req.url, 'http://localhost').pathname;
       if (req.method === 'GET' && pathname === '/api/document') { assertInputUnchanged(); return send(res, 200, { ...source.metadata, sourceHash: source.sourceHash, ruleHash: source.ruleHash, pages: source.pages, storageFile: path.relative(workspace, dbPath).replaceAll('\\', '/') }); }
       if (req.method === 'GET' && pathname === '/api/review') { assertInputUnchanged(); return send(res, 200, snapshot()); }
+      if (req.method === 'GET' && pathname === '/api/heading-review') { assertInputUnchanged(); return send(res, 200, { sourceHash: source.sourceHash, ruleHash: source.ruleHash, ...headingStore.context() }); }
+      if (req.method === 'PUT' && pathname === '/api/review/headings') {
+        const body = await bodyOf(req);
+        return send(res, 200, mutate(body, () => { if (body.action === 'save') headingStore.save(body); else if (body.action === 'restore') headingStore.restore(body.id); else throw new RequestError(400, '제목 저장/복원 작업을 지정하세요.'); }));
+      }
       if (req.method === 'GET' && pathname === '/api/reading-review') { assertInputUnchanged(); return send(res, 200, { sourceHash: source.sourceHash, ruleHash: source.ruleHash, ...readingStore.context() }); }
       if (req.method === 'PUT' && ['/api/review/reading-order', '/api/review/page-connections'].includes(pathname)) {
         const body = await bodyOf(req);
@@ -333,6 +341,7 @@ export function createReviewApp(options = {}) {
           if (body.action === 'complete') {
             if (stage === 3 || stage === 12) roleStore.assertComplete();
             if (stage === 4 || stage === 12) readingStore.assertComplete();
+            if (stage === 5 || stage === 12) headingStore.assertComplete();
             if (stage === 2 && body.includeUnreviewed) {
               const pending = db.prepare("SELECT count(*) AS count FROM page_decisions WHERE review_id = ? AND status = 'pending'").get(reviewId).count;
               if (pending) throw new RequestError(400, `보류 페이지 ${pending}개를 먼저 확인하세요.`);

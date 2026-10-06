@@ -11,6 +11,7 @@ import { checkSuggestionUI } from './suggestions-browser.mjs';
 import { fixtureJson, fixtureProject } from './local-fixture.mjs';
 import { checkRoleUI, checkActualRoleLayout } from './roles-browser.mjs';
 import { checkReadingUI, checkActualReadingLayout } from './reading-browser.mjs';
+import { checkHeadingUI, checkActualHeadingLayout } from './headings-browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.CANDOC_BUILD_DIR ??= 'qa/browser-dist';
@@ -432,6 +433,8 @@ try {
   await checkActualRoleLayout(browser);
   await checkReadingUI(browser);
   await checkActualReadingLayout(browser);
+  await checkHeadingUI(browser);
+  await checkActualHeadingLayout(browser);
   assert.deepEqual(errors, []);
   assert.equal(hash(await readFile(originalPath)), baseline);
   console.log('Browser checks passed: document info without completion or notes, 11 review steps, schema/converter versions distinguished, unverified version and missing-image guidance, document-info mobile/dark layouts, unusable input error screen without DB writes, readable text contrast, shared control sizes, collapsed mobile process, keep remaining pages and finish, exclusion stamps/restoration, pending gate, reload/restart persistence, independent toggles, additive Shift range, all 138 pages, 40-page bulk decisions, filtering, zoom, drafts, source image/text, hidden panel, double-click, 1512/1024/375/320px, theme persistence. Test DB was isolated from project review records.');

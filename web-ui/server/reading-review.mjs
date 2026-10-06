@@ -30,7 +30,7 @@ export function inspectReadingTree(source) {
   return { treeOrder, diagnostics };
 }
 
-export function createReadingStore({ db, reviewId, source, roleStore, now, fail }) {
+export function createReadingStore({ db, reviewId, source, roleStore, now, fail, onChange = () => {} }) {
   db.exec(`CREATE TABLE IF NOT EXISTS order_reviews (
     review_id INTEGER NOT NULL REFERENCES reviews(id), scope_id TEXT NOT NULL, page_no INTEGER NOT NULL,
     payload TEXT NOT NULL, dependency_hash TEXT NOT NULL, needs_review INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
@@ -116,6 +116,7 @@ export function createReadingStore({ db, reviewId, source, roleStore, now, fail 
     }
   }
   function saveOrder(body) {
+    const previous = rows('order_reviews').find(row => row.id === body.id);
     const scope = context().scopes.find(scope => scope.id === body.id), payload = common(body, scope);
     if (!Array.isArray(body.order) || body.order.length !== scope.originalOrder.length || new Set(body.order).size !== body.order.length || body.order.some(id => !scope.originalOrder.includes(id))) fail(400, '현재 영역의 모든 출처를 중복·누락 없이 순서안에 포함하세요.');
     if (body.status === 'normal' && (!scope.sourceOrderKnown || JSON.stringify(body.order) !== JSON.stringify(scope.originalOrder))) fail(400, '원본 순서가 없거나 변경한 순서안은 정상으로 저장할 수 없습니다.');
@@ -124,8 +125,10 @@ export function createReadingStore({ db, reviewId, source, roleStore, now, fail 
     db.prepare(`INSERT INTO order_reviews(review_id, scope_id, page_no, payload, dependency_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(review_id, scope_id) DO UPDATE SET payload=excluded.payload, dependency_hash=excluded.dependency_hash, needs_review=0, updated_at=excluded.updated_at`).run(reviewId, scope.id, scope.page, JSON.stringify(payload), scope.dependencyHash, now());
     markStages([scope.page]);
+    if (!previous || previous.status !== payload.status || JSON.stringify(previous.order) !== JSON.stringify(payload.order)) onChange([scope.page]);
   }
   function saveBoundary(body) {
+    const previous = rows('boundary_reviews').find(row => row.id === body.id);
     const boundary = context().boundaries.find(boundary => boundary.id === body.id), payload = common(body, boundary);
     if (!Array.isArray(body.links) || body.links.length > boundary.leftEntries.length * Math.max(1, boundary.rightEntries.length) || typeof body.noConnection !== 'boolean' || (body.noConnection && body.links.length) || (!body.links.length && !body.noConnection && body.status !== 'unjudgeable')) fail(400, '연결 대상 또는 명시적인 연결 없음을 기록하세요.');
     const pairs = new Set();
@@ -145,6 +148,7 @@ export function createReadingStore({ db, reviewId, source, roleStore, now, fail 
     db.prepare(`INSERT INTO boundary_reviews(review_id, boundary_id, left_page, right_page, payload, dependency_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(review_id, boundary_id) DO UPDATE SET payload=excluded.payload, dependency_hash=excluded.dependency_hash, needs_review=0, updated_at=excluded.updated_at`).run(reviewId, boundary.id, boundary.leftPage, boundary.rightPage, JSON.stringify(payload), boundary.dependencyHash, now());
     markStages([boundary.leftPage, boundary.rightPage]);
+    if (!previous || previous.status !== payload.status || previous.noConnection !== payload.noConnection || JSON.stringify(previous.links) !== JSON.stringify(payload.links)) onChange([boundary.leftPage, boundary.rightPage]);
   }
   function invalidatePages(pages) {
     for (const page of pages.length ? pages : [0]) {
