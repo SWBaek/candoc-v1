@@ -4,7 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { AnnotationRect, RoleAnnotationContext, RoleAnnotationGroup, RoleElement } from '@/types';
 import type { RoleReviewProps, RoleReviewHandle } from './role-review';
 
-type Model = { model: string; displayName: string; efforts: string[]; defaultEffort?: string; isDefault: boolean };
+import { ProjectCodexLink, useProjectCodex } from './project-codex-settings';
 const names: Record<string, string> = { header: '머리말', footer: '꼬리말', page_number: '페이지 번호', body: '본문', title: '제목', unknown: '미확정' };
 const styleBox = (rect: AnnotationRect) => ({ left: `${rect.left * 100}%`, top: `${rect.top * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%` });
 function overlaps(a: AnnotationRect, b: AnnotationRect) { return a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height; }
@@ -13,7 +13,8 @@ export const RoleAnnotations = forwardRef<RoleReviewHandle, RoleReviewProps & { 
   const retained = doc.pages.filter(page => review.decisions.find(row => row.page === page.number)?.status !== 'excluded');
   const [pageNo, setPageNo] = useState(initialPage || retained[0]?.number || 0), [rect, setRect] = useState<AnnotationRect | null>(null), [comment, setComment] = useState(''), [drawing, setDrawing] = useState(false);
   const [context, setContext] = useState<RoleAnnotationContext | null>(null), [annotationId, setAnnotationId] = useState(''), [panel, setPanel] = useState(false), [error, setError] = useState(''), [pending, setPending] = useState(false);
-  const [models, setModels] = useState<Model[]>([]), [model, setModel] = useState(''), [effort, setEffort] = useState(''), [exceptions, setExceptions] = useState<Record<string, string[]>>({}), [activeRef, setActiveRef] = useState('');
+  const { state: { settings: { model, effort } } } = useProjectCodex();
+  const [exceptions, setExceptions] = useState<Record<string, string[]>>({}), [activeRef, setActiveRef] = useState('');
   const imageRef = useRef<HTMLImageElement>(null), canvasRef = useRef<HTMLDivElement>(null), inputRef = useRef<HTMLTextAreaElement>(null), panelRef = useRef<HTMLElement>(null), openerRef = useRef<HTMLButtonElement>(null), sequence = useRef(0), mounted = useRef(true);
   const [narrow, setNarrow] = useState(window.matchMedia('(max-width: 970px)').matches);
   const drag = useRef<{ id: number; x: number; y: number } | null>(null), latestRect = useRef<AnnotationRect | null>(null);
@@ -104,11 +105,6 @@ export const RoleAnnotations = forwardRef<RoleReviewHandle, RoleReviewProps & { 
     }
     setRect(next as AnnotationRect); latestRect.current = next as AnnotationRect;
   }
-  async function connect() {
-    setPending(true); setError('');
-    try { const value = await call('/api/role-models'); setModels(value.models); const first: Model = value.models.find((row: Model) => row.model === (model || job?.model)) ?? value.models.find((row: Model) => row.isDefault) ?? value.models[0]; if (first) { setModel(first.model); const previous = effort || job?.effort; setEffort(previous && first.efforts.includes(previous) ? previous : first.defaultEffort ?? first.efforts[0] ?? ''); } else setError('사용 가능한 로컬 모델이 없습니다.'); }
-    catch (e) { setError((e as Error).message); } finally { setPending(false); }
-  }
   async function request() {
     setPending(true); setError('');
     try { await call('/api/review/role-annotation-suggestions', 'POST', { revision: review.revision, sourceHash: doc.sourceHash, ruleHash: doc.ruleHash, annotationId, model, effort }); setExceptions({}); await load(); }
@@ -145,7 +141,7 @@ export const RoleAnnotations = forwardRef<RoleReviewHandle, RoleReviewProps & { 
         <div className="role-annotation-thread">
           {!!context?.annotations.length && <select aria-label="저장된 영역 주석" value={annotationId} disabled={busy || dirty} onChange={event => openAnnotation(event.target.value)}>{context.annotations.map(row => <option key={row.id} value={row.id}>{row.page}페이지 · {row.comment}</option>)}</select>}
           {annotation && <><div className="role-annotation-message"><strong>원본 {annotation.page}페이지에 남긴 요청</strong><p>{annotation.comment}</p><Button variant="ghost" disabled={dirty} onClick={() => openAnnotation(annotation.id)}>표시 영역으로 이동</Button><details><summary>예시 JSON {annotation.matches.length}개</summary>{annotation.matches.map(match => <p key={match.ref}>{items.find(item => item.ref === match.ref)?.text} · {match.ref}{match.locations.some(row => row.overlap < 1 - 1e-9) ? ' · 일부 겹침' : ''}</p>)}</details></div>
-            <details className="role-annotation-settings" open={!model}><summary>로컬 모델 · {model || '연결 필요'}{effort ? ` / ${effort}` : ''}</summary><Button variant="outline" disabled={pending || running} onClick={() => void connect()}>로컬 모델 연결</Button><label>모델<select aria-label="영역 추천 모델" value={model} disabled={running || pending} onChange={event => { setModel(event.target.value); const row = models.find(row => row.model === event.target.value)!; setEffort(row.defaultEffort ?? row.efforts[0] ?? ''); }}><option value="">모델 선택</option>{models.map(row => <option key={row.model} value={row.model}>{row.displayName}</option>)}</select></label><label>Reasoning effort<select aria-label="영역 추천 Reasoning effort" value={effort} disabled={running || pending} onChange={event => setEffort(event.target.value)}><option value="">effort 선택</option>{models.find(row => row.model === model)?.efforts.map(value => <option key={value}>{value}</option>)}</select></label></details>
+            <ProjectCodexLink />
             <p className="role-scope-note">Agent에는 좌표·bbox·JSON 텍스트를 전달합니다. PNG는 사람의 원문 확인용입니다.</p><Button disabled={busy || pending || running || dirty || !model || !effort} onClick={() => void request()}>이 주석으로 Agent에 요청</Button>
           </>}
           {running && <div role="status"><p>유지 페이지의 문구·위치·분할 형태를 비교하고 있습니다…</p><Button variant="outline" onClick={() => { const current = context!.jobs.find(row => row.status === 'running')!; void call('/api/review/role-annotation-suggestions', 'DELETE', { id: current.id }).then(setContext).catch(e => setError(e.message)); }}>추천 생성 취소</Button></div>}

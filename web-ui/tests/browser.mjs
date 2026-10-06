@@ -430,6 +430,7 @@ try {
     assert.equal(existsSync(path.join(temp, 'invalid-review.sqlite')), false);
   } finally { await invalidPage.close(); await invalidApp.close(); }
   await checkSuggestionUI(browser);
+  await (await import('./project-codex-settings-browser.mjs')).checkProjectCodexSettingsUI(browser);
   await checkRoleUI(browser);
   await (await import('./role-questions-browser.mjs')).checkRoleQuestionsUI(browser);
   const annotations = await import('./role-annotations-browser.mjs'); await annotations.checkRoleAnnotationsUI(browser); await annotations.checkActualAnnotationLayout(browser);

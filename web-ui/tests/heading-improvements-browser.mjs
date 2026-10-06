@@ -1,3 +1,4 @@
+import { configureProjectModel } from './project-codex-settings-browser.mjs';
 import { expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
@@ -38,7 +39,7 @@ export async function checkHeadingImprovementsUI(browser) {
     // Restore just the saved adoption before testing an independent grouped
     // recommendation; approval and persistence remain separate actions.
     await page.getByLabel('검수 보기', { exact: true }).selectOption('tree'); await page.locator('.heading-tools > summary').click(); await page.getByRole('button', { name: '선택 취소', exact: true }).click(); await page.locator('.heading-tools > summary').click(); await page.getByRole('button', { name: '직전 저장 복원', exact: true }).click(); await expect(row(6)).toHaveCount(0);
-    await page.getByText('에이전트 추천', { exact: true }).click(); await page.getByRole('button', { name: '로컬 모델 목록 확인', exact: true }).click(); await expect(page.getByLabel('제목 추천 모델')).toHaveValue('test-model'); await page.getByLabel('제목 추천 Reasoning effort').selectOption('medium'); const beforeRecommendation = await state(); await page.getByRole('button', { name: '목차 추천 요청', exact: true }).click(); await page.getByText(/Synthetic grouped hierarchy recommendation/).click(); assert.deepEqual(await state(), beforeRecommendation);
+    await page.getByText('에이전트 추천', { exact: true }).click(); await configureProjectModel(page); const beforeRecommendation = await state(); await page.getByRole('button', { name: '목차 추천 요청', exact: true }).click(); await page.getByText(/Synthetic grouped hierarchy recommendation/).click(); assert.deepEqual(await state(), beforeRecommendation);
     await page.getByRole('button', { name: '목차·원문으로 이동' }).first().click(); await expect(row(1)).toHaveAttribute('aria-selected', 'true'); await expect(page.locator('.heading-source img')).toHaveAttribute('src', '/api/pages/1/image');
     await page.getByLabel('#/texts/1 추천 대상', { exact: true }).uncheck(); await page.getByRole('button', { name: '선택 추천 승인 · 초안 반영', exact: true }).click(); await expect(page.locator('.heading-agent [role="alert"]')).toBeVisible(); assert.deepEqual(await state(), beforeRecommendation);
     await page.getByLabel('#/texts/1 추천 대상', { exact: true }).check(); await page.getByRole('button', { name: '선택 추천 승인 · 초안 반영', exact: true }).click(); assert.deepEqual(await state(), beforeRecommendation); await expect(page.getByRole('button', { name: '전체 초안 취소', exact: true })).toBeEnabled(); await page.getByRole('button', { name: '초안 실행취소', exact: true }).click(); await expect(save()).toBeDisabled();

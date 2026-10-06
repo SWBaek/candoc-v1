@@ -74,7 +74,7 @@ synthetic 입력 및 실제 fixture의 읽기 전용 데이터를 임시 DB·자
 기존 `codex-suggestions.mjs` stdio app-server·현재 로그인·read-only ephemeral thread·approvalPolicy never·도구/승인 요청 거절을 재사용한다. 모델 목록 조회에는 thread/turn을 만들지 않는다. 모델 목록은 사용 권한/추론 성공의 증거가 아니다. [공식 app-server 문서](https://learn.chatgpt.com/docs/app-server)의 model/list, thread/start, turn/start outputSchema/effort, final agentMessage/turn.completed 계약을 사용한다.
 
 - GET `/api/heading-models`: model/list의 model/displayName/지원 effort/default effort. 목록/로그인 실패는 503으로 표시하며 가짜 모델 목록을 만들지 않는다.
-- POST `/api/review/heading-suggestions`: revision/model/effort. 전체 유지 JSON 텍스트와 제목 구조·근거·위치를 입력한다. 비제목 본문은 360자로 축약하고 textTruncated/origTruncated를 명시한다. 원본/모든 prov 저장은 그대로 유지한다. 입력 한도 2 MiB, 시간 제한은 기존 1~600초 설정(기본 240초). 이번 실제 fixture 입력 약 1.5 MB다. 모델의 컨텍스트/사용 권한/이용 한도 오류는 실패로 보고한다.
+- POST `/api/review/heading-suggestions`: revision/model/effort. [프로젝트 설정](project-codex-settings-v0.1.md)이 있으면 model/effort는 생략 가능하며 저장값을 사용하고, 다른 명시 값은 409로 거부한다. UI는 프로젝트 설정을 공유한다. 전체 유지 JSON 텍스트와 제목 구조·근거·위치를 입력한다. 비제목 본문은 360자로 축약하고 textTruncated/origTruncated를 명시한다. 원본/모든 prov 저장은 그대로 유지한다. 입력 한도 2 MiB, 시간 제한은 기존 1~600초 설정(기본 240초). 이번 실제 fixture 입력 약 1.5 MB다. 모델의 컨텍스트/사용 권한/이용 한도 오류는 실패로 보고한다.
 - GET 같은 경로: in-memory job 상태/추천/오류/stale. 재시작 시 추천은 사라진다. 추천 생성·조회는 검수 DB를 변경하지 않는다.
 - DELETE 같은 경로: 현재 job id의 생성만 취소한다.
 - POST `/api/review/heading-suggestions/preview`: id/groupId/revision/exceptions. 원본/규칙 지문·검수 revision·ref와 예외 부분집합을 확인하고 전체 제안 구조를 다시 검증한다. 오래된 추천은 409, 불가능한 예외 조합은 400. 반환 items를 사용자 승인 후 UI 초안에만 반영한다. 별도 명시 저장에도 기존 revision 충돌 검사를 적용한다.

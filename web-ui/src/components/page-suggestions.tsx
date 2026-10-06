@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/icon';
 import type { PageSuggestion, SuggestionJob } from '@/types';
+import { ProjectCodexLink } from './project-codex-settings';
 
 type Props = { sourceHash: string; ruleHash: string; disabled: boolean; open: boolean; panelHost: HTMLDivElement | null; onOpen: () => void; onClose: () => void; onResult: (suggestions: PageSuggestion[]) => void; onSelect: (pages: number[]) => void };
 const endpoint = '/api/review/page-suggestions';
@@ -95,6 +96,7 @@ export function PageSuggestions({ sourceHash, ruleHash, disabled, open, panelHos
         </> : <div className="ai-welcome"><Icon name="chat" /><strong>페이지 선별을 함께 시작하세요.</strong><p>표지·목차·참여자 목록 등 제외할 만한 페이지와 이유를 추천합니다.</p>{error && <p className="ai-suggestion-error" role="alert">{error}</p>}</div>}
       </section>
       <div className="ai-panel-actions">
+        <ProjectCodexLink />
         {pages.length > 0 && <Button size="sm" disabled={disabled || sending} onClick={() => onSelect(pages)}>추천 전체 선택</Button>}
         {running ? <Button size="sm" variant="outline" disabled={sending} onClick={() => void submit('DELETE')}>{sending ? '취소 중…' : '추천 취소'}</Button> : <Button size="sm" variant="outline" disabled={disabled || sending} onClick={() => void submit('POST')}>{job?.id ? '다시 추천' : '페이지 추천 시작'}</Button>}
         <p>선택한 페이지는 기존 ‘제외’ 버튼에서 사유를 확인하고 저장하세요.</p>

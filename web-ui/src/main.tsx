@@ -9,6 +9,7 @@ import { PageSuggestions } from '@/components/page-suggestions';
 import { RoleReview, type RoleReviewHandle } from '@/components/role-question-review';
 import { HeadingReview } from '@/components/heading-review';
 import { ReadingReview } from '@/components/reading-review';
+import { ProjectCodexProvider, useProjectCodex } from '@/components/project-codex-settings';
 import type { DecisionStatus, DocumentInfo, ElementInfo, Evidence, PageDecision, PageInfo, PageSuggestion, Review, Stage } from './types';
 
 const labels: Record<DecisionStatus, string> = { unreviewed: '미검수', included: '포함', excluded: '제외', pending: '보류' };
@@ -39,6 +40,7 @@ const draftOf = (decision: PageDecision, page: PageInfo): Draft => ({ status: de
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function App() {
+  const { openSettings } = useProjectCodex();
   const [document, setDocument] = useState<DocumentInfo | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const reviewRef = useRef<Review | null>(null);
@@ -248,8 +250,8 @@ function App() {
         <span className="step-name">{item.name}<span className="sr-only"> · {item.status === 'completed' ? '완료' : item.status === 'needs_review' ? '재검토 필요' : '미완료'}</span></span>{item.id === stage.id && <span className="current-dot" aria-hidden="true" />}
       </Button>)}</nav>
       <div className="legend"><span><i /> 완료</span><span><b>진행 중</b></span><span>대기</span></div>
-      <div className="sidebar-footer"><span>화면 모드</span><div className="theme-switch"><Button size="icon" variant="ghost" aria-label="밝은 테마" aria-pressed={theme === 'light'} onClick={() => setTheme('light')}><Icon name="sun" /></Button><Button size="icon" variant="ghost" aria-label="어두운 테마" aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}><Icon name="moon" /></Button></div></div>
       </div>
+      <div className="sidebar-footer"><Button variant="ghost" className="settings-menu" aria-label="설정" title="프로젝트 설정" onClick={openSettings}><Icon name="settings" /><span className="settings-menu-label">설정</span></Button><div className="theme-switch"><Button size="icon" variant="ghost" aria-label="밝은 테마" aria-pressed={theme === 'light'} onClick={() => setTheme('light')}><Icon name="sun" /></Button><Button size="icon" variant="ghost" aria-label="어두운 테마" aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}><Icon name="moon" /></Button></div></div>
     </aside>
     <main className="main">
       <header className="topbar"><span className="location-trail"><span className="location-document">{document.name}</span><span className="breadcrumb">/</span>{stage.name}</span><span className={`saved-status ${dirty ? 'save-dirty' : ''}`} role="status" title={new Date(review.updatedAt).toLocaleString('ko-KR')}><i />{busy ? '저장 중…' : dirty ? '저장 전 변경' : '저장됨'}</span></header>
@@ -320,4 +322,4 @@ function App() {
   </div>;
 }
 
-createRoot(window.document.getElementById('root')!).render(<App />);
+createRoot(window.document.getElementById('root')!).render(<ProjectCodexProvider><App /></ProjectCodexProvider>);

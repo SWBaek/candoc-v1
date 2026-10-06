@@ -1,6 +1,7 @@
 import type { SVGProps } from 'react';
 
 const paths = {
+  settings: <><path d="M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z" /><circle cx="12" cy="12" r="3" /></>,
   chat: <><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H6l-4 2 2-5v-5.5A8.5 8.5 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5Z" /><path d="M8 10h8M8 14h5" /></>,
   close: <><path d="m6 6 12 12M18 6 6 18" /></>,
   document: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M8 13h8M8 17h6" /></>,

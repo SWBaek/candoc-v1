@@ -1,3 +1,4 @@
+import { configureProjectModel } from './project-codex-settings-browser.mjs';
 import { expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -37,6 +38,9 @@ export async function checkRoleAnnotationsUI(browser) {
     await page.goto(url); await page.locator('[data-stage-id="3"]').click(); await open();
     await page.getByLabel('주석 원본 페이지', { exact: true }).selectOption('4'); await dragBox(page, rect);
     const input = page.getByLabel('이 영역에 대한 코멘트', { exact: true }); await input.fill('같은 영역의 문구와 분리된 두 줄을 머리말로 처리해줘');
+    const beforeSettings = await state();
+    await page.getByRole('button', { name: '설정', exact: true }).click(); await expect(page.getByRole('dialog', { name: '프로젝트 설정', exact: true })).toBeVisible(); await page.keyboard.press('Escape');
+    await expect(input).toHaveValue('같은 영역의 문구와 분리된 두 줄을 머리말로 처리해줘'); await expect(page.getByLabel('표시한 주석 영역', { exact: true })).toHaveCount(1); assert.deepEqual(await state(), beforeSettings);
     await expect(page.locator('.role-annotation-comment')).toContainText('대응 JSON 텍스트 3개');
     await page.locator('[data-stage-id="4"]').click(); const prompt = page.getByRole('dialog', { name: '저장하지 않은 변경이 있습니다.', exact: true });
     await expect(prompt).toBeVisible(); await prompt.getByRole('button', { name: '현재 화면 유지', exact: true }).click(); await expect(input).toHaveValue('같은 영역의 문구와 분리된 두 줄을 머리말로 처리해줘');
@@ -44,7 +48,7 @@ export async function checkRoleAnnotationsUI(browser) {
     const panel = page.getByRole('complementary', { name: '주석에 연결된 AI 응답', exact: true }); await expect(panel).toBeVisible();
     assert.deepEqual((await state()).roleReviews, before.roleReviews);
     assert.deepEqual((await annotations()).annotations[0].matches.map(row => row.ref), ['#/texts/9', '#/texts/10', '#/texts/11']);
-    await panel.getByRole('button', { name: '로컬 모델 연결', exact: true }).click(); await expect(page.getByLabel('영역 추천 모델', { exact: true })).toHaveValue('test-model'); await expect(page.getByLabel('영역 추천 Reasoning effort', { exact: true })).toHaveValue('medium');
+    await configureProjectModel(page);
     await panel.getByRole('button', { name: '이 주석으로 Agent에 요청', exact: true }).click(); await expect(page.getByLabel('영역 추천 묶음', { exact: true })).toBeVisible(); assert.deepEqual((await state()).roleReviews, before.roleReviews);
     await panel.getByText('대상·변경 전후·예외 확인', { exact: true }).click();
     await page.getByLabel('#/texts/2 영역 추천 대상', { exact: true }).uncheck();
@@ -64,6 +68,7 @@ export async function checkRoleAnnotationsUI(browser) {
     await expect(input).toBeFocused(); await input.fill('키보드 영역 선택'); await input.press('Tab'); await expect(page.locator('.role-annotation-comment').getByRole('button', { name: '취소', exact: true })).toBeFocused();
     await page.locator('.role-annotation-comment').getByRole('button', { name: '취소', exact: true }).click();
     await page.setViewportSize({ width: 375, height: 982 }); await page.getByRole('button', { name: '주석·AI 응답', exact: true }).click(); await expect(page.locator('.role-annotation-panel')).toBeVisible();
+    const projectLink = page.locator('.role-annotation-panel .project-codex-link'); await projectLink.click(); await expect(page.getByRole('dialog', { name: '프로젝트 설정', exact: true })).toBeVisible(); await page.keyboard.press('Escape'); await expect(page.locator('.role-annotation-panel')).toBeVisible(); await expect(projectLink).toBeFocused();
     await page.locator('.role-annotation-panel').getByRole('button', { name: '닫기', exact: true }).focus(); await page.keyboard.press('Shift+Tab'); assert.ok(await page.locator('.role-annotation-panel').evaluate(panel => panel.contains(document.activeElement))); await page.keyboard.press('Escape'); await expect(page.locator('.role-annotation-panel')).toHaveCount(0); await expect(page.getByRole('button', { name: '주석·AI 응답', exact: true })).toBeFocused();
     await page.getByRole('button', { name: '영역 표시', exact: true }).click();
     const touchBounds = await page.locator('.role-annotation-canvas > img').boundingBox(), cdp = await page.context().newCDPSession(page);
