@@ -53,7 +53,7 @@ export function buildRoleSource(document, pageMap) {
   }
   const groups = clusters.filter(group => new Set(group.members.map(member => member.page)).size >= 2).map(group => {
     const refs = [...new Set(group.members.map(member => member.ref))];
-    return { id: createHash('sha256').update(JSON.stringify([group.key, group.band, refs])).digest('hex').slice(0, 16), kind: group.kind, normalizedText: group.key, refs, pages: [...new Set(items.filter(item => refs.includes(item.ref)).flatMap(item => item.pages))].sort((a, b) => a - b), representative: refs[0] };
+    return { id: createHash('sha256').update(JSON.stringify([group.key, group.band, refs])).digest('hex').slice(0, 16), kind: group.kind, band: group.band, normalizedText: group.key, refs, pages: [...new Set(items.filter(item => refs.includes(item.ref)).flatMap(item => item.pages))].sort((a, b) => a - b), representative: refs[0] };
   });
   return { items, groups, itemMap: new Map(items.map(item => [item.ref, item])), targets: [...nodes].map(([ref, node]) => ({ ref, label: node.label ?? ref, parentRef: node.parent?.$ref ?? '', pages: pagesOf(ref) })) };
 }
@@ -170,11 +170,16 @@ export function createRoleStore({ db, reviewId, source, now, fail, onChange = ()
     if (body.action !== 'save' || !Array.isArray(body.refs) || !body.refs.length || new Set(body.refs).size !== body.refs.length || body.refs.length > data.items.length) fail(400, '일괄 저장할 원본 요소를 중복 없이 선택하세요.');
     const group = data.groups.find(group => group.id === body.groupId);
     if (!group || body.refs.some(ref => !group.refs.includes(ref))) fail(400, '선택 대상이 해당 반복 후보 그룹에 속하지 않습니다.');
-    body.refs.forEach(ref => validate({ ...body, ref }));
-    const saved = new Map(records().map(row => [row.ref, row])), before = body.refs.map(ref => saved.get(ref) ?? null);
-    body.refs.forEach(ref => save({ ...body, ref }));
-    const after = new Map(records().map(row => [row.ref, row]));
-    db.prepare('INSERT INTO role_batches(id, review_id, refs, before_json, after_json, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(randomUUID(), reviewId, JSON.stringify(body.refs), JSON.stringify(before), JSON.stringify(body.refs.map(ref => after.get(ref))), now());
+    saveBatch(body.refs.map(ref => ({ ...body, ref })));
   }
-  return { records, coverage, save, validate, assertComplete, invalidatePage, batch, undo };
+  function saveBatch(entries) {
+    if (!entries.length || new Set(entries.map(row => row.ref)).size !== entries.length) fail(400, '저장할 대상을 중복 없이 선택하세요.');
+    entries.forEach(validate);
+    const refs = entries.map(row => row.ref);
+    const saved = new Map(records().map(row => [row.ref, row])), before = refs.map(ref => saved.get(ref) ?? null);
+    entries.forEach(save);
+    const after = new Map(records().map(row => [row.ref, row]));
+    db.prepare('INSERT INTO role_batches(id, review_id, refs, before_json, after_json, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(randomUUID(), reviewId, JSON.stringify(refs), JSON.stringify(before), JSON.stringify(refs.map(ref => after.get(ref))), now());
+  }
+  return { records, coverage, save, saveBatch, validate, assertComplete, invalidatePage, batch, undo, markStages };
 }

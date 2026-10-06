@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { extractPageInput, runCodexSuggestions, validateSuggestions } from './codex-suggestions.mjs';
 import { buildRoleSource, createRoleStore } from './role-review.mjs';
+import { createRoleQuestionStore } from './role-questions.mjs';
 import { createReadingStore } from './reading-review.mjs';
 import { listHeadingModels, runHeadingSuggestions, validateHeadingSuggestions } from './heading-suggestions.mjs';
 import { createHeadingStore } from './heading-review.mjs';
@@ -153,6 +154,7 @@ export function createReviewApp(options = {}) {
   const fail = (status, message) => { throw new RequestError(status, message); };
   let readingStore, headingStore;
   const roleStore = createRoleStore({ db, reviewId, source, now, fail, onChange: pages => { readingStore?.invalidatePages(pages); headingStore?.invalidatePages(pages); } });
+  const roleQuestions = createRoleQuestionStore({ db, reviewId, source, roleStore, now, fail });
   readingStore = createReadingStore({ db, reviewId, source, roleStore, now, fail, onChange: pages => headingStore?.invalidatePages(pages) });
   headingStore = createHeadingStore({ db, reviewId, source, roleStore, readingStore, now, fail });
   const baseline = new Map([jsonPath, rulePath].map(file => [file, statSync(file)]));
@@ -302,6 +304,18 @@ export function createReviewApp(options = {}) {
         const body = await bodyOf(req);
         return send(res, 200, mutate(body, () => roleStore.save(body)));
       }
+      if (pathname === '/api/role-questions' && req.method === 'GET') {
+        assertInputUnchanged();
+        return send(res, 200, roleQuestions.context());
+      }
+      if (pathname === '/api/review/role-questions' && req.method === 'PUT') {
+        const body = await bodyOf(req);
+        return send(res, 200, mutate(body, () => roleQuestions.answer(body)));
+      }
+      if (pathname === '/api/review/role-page-check' && req.method === 'PUT') {
+        const body = await bodyOf(req);
+        return send(res, 200, mutate(body, () => roleQuestions.confirmPage(body)));
+      }
       if (pathname === '/api/review/role-groups' && req.method === 'PUT') {
         const body = await bodyOf(req);
         return send(res, 200, mutate(body, () => roleStore.batch(body)));
@@ -377,7 +391,7 @@ export function createReviewApp(options = {}) {
         if (body.includeUnreviewed !== undefined && (typeof body.includeUnreviewed !== 'boolean' || (body.includeUnreviewed && (stage !== 2 || body.action !== 'complete')))) throw new RequestError(400, '나머지 페이지 유지는 페이지 선별 완료에서만 지정할 수 있습니다.');
         return send(res, 200, mutate(body, () => {
           if (body.action === 'complete') {
-            if (stage === 3 || stage === 12) roleStore.assertComplete();
+            if (stage === 3 || stage === 12) { roleStore.assertComplete(); roleQuestions.assertComplete(); }
             if (stage === 4 || stage === 12) readingStore.assertComplete();
             if (stage === 5 || stage === 12) headingStore.assertComplete();
             if (stage === 2 && body.includeUnreviewed) {

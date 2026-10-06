@@ -1,28 +1,11 @@
+import { harness } from './role-harness.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
-import path from 'node:path';
-import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
-import { createReviewApp } from '../server/app.mjs';
 import { normalizedBox } from '../server/role-review.mjs';
-import { roleDocument, pixelPng } from './fixtures/role-document.mjs';
+import { roleDocument } from './fixtures/role-document.mjs';
 
 const judgment = { status: 'normal', region: 'header', role: 'header', parentRef: '#/furniture', reason: '반복 문구와 상단 위치를 대조함', evidence: 'json', followUp: '' };
-async function harness(t) {
-  const projectDir = await mkdtemp(path.join(tmpdir(), 'candoc-roles-')), dbPath = path.join(projectDir, 'inspection/review.sqlite');
-  await mkdir(path.join(projectDir, 'raw/artifacts'), { recursive: true });
-  const jsonPath = path.join(projectDir, 'raw/ieee1547-document.json'), bytes = JSON.stringify(roleDocument());
-  await writeFile(jsonPath, bytes); await writeFile(path.join(projectDir, 'raw/artifacts/page.png'), pixelPng);
-  let app, url;
-  async function start() { app = createReviewApp({ projectDir, dbPath }); await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve)); url = `http://127.0.0.1:${app.server.address().port}`; }
-  await start();
-  const call = async (endpoint, body) => { const response = await fetch(url + endpoint, body ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined); return { status: response.status, data: await response.json() }; };
-  t.after(async () => { await app.close(); assert.equal(await readFile(jsonPath, 'utf8'), bytes); assert.equal(path.dirname(projectDir), path.resolve(tmpdir())); assert.ok(path.basename(projectDir).startsWith('candoc-roles-')); await rm(projectDir, { recursive: true, force: true }); });
-  const state = async () => (await call('/api/review')).data;
-  const put = async (endpoint, body) => call(endpoint, { revision: (await state()).revision, ...body });
-  return { call, state, put, dbPath, get app() { return app; }, restart: async () => { await app.close(); await start(); } };
-}
 
 test('repeat candidates normalize text and position, varying numbers group without automatic judgments; all provenance remains intact', async t => {
   const h = await harness(t), baseline = await h.state();
