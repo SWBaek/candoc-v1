@@ -86,12 +86,13 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
     const stack = [];
     for (const item of allTexts) {
       const saved = records.get(item.ref), role = roles.get(item.ref);
-      item.classifiedHeading = saved ? saved.isHeading === true : ['section_header', 'title'].includes(item.label) || role?.role === 'title';
+      const sourceHeading = ['section_header', 'title'].includes(item.label) || role?.role === 'title';
+      item.classifiedHeading = saved ? saved.isHeading === true || sourceHeading && (saved.isHeading === null || saved.needsReview || ['suspected', 'unjudgeable'].includes(saved.status)) : sourceHeading;
       const sourceLevel = Number.isInteger(item.originalLevel) && item.originalLevel > 0 ? item.originalLevel : 1;
-      while (stack.length && stack.at(-1).sourceLevel >= sourceLevel) stack.pop();
+      if (item.classifiedHeading) while (stack.length && stack.at(-1).sourceLevel >= sourceLevel) stack.pop();
       const parent = textMap.has(item.parentRef) && allTexts.find(other => other.ref === item.parentRef)?.classifiedHeading ? allTexts.find(other => other.ref === item.parentRef)?.initialDraft : stack.at(-1)?.row;
       item.initialDraft = saved ?? { ref: item.ref, status: '', reason: '', followUp: '', evidence: 'json', isHeading: item.classifiedHeading ? true : null, level: item.classifiedHeading ? (parent?.level ?? 0) + 1 : null, parentRef: item.classifiedHeading ? parent?.ref ?? '' : '', sectionNumber: item.classifiedHeading ? item.numberHint : '', part: item.classifiedHeading ? parent?.part || 'body' : '', position: item.readingIndex ?? Number(item.ref.split('/').at(-1)) };
-      if (item.classifiedHeading) stack.push({ sourceLevel, row: item.initialDraft });
+      if (item.classifiedHeading && item.initialDraft.isHeading) stack.push({ sourceLevel, row: item.initialDraft });
       item.missingCandidate = !item.classifiedHeading && !item.running && item.hints.includes('주변 제목과 번호 체계 대조 후보');
       if (item.classifiedHeading) item.candidate = true;
     }

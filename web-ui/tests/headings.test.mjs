@@ -151,3 +151,28 @@ test('recommendation preview checks version, refs and exception subtree atomical
   assert.deepEqual(await h.state(), before);
   await h.put('/api/review/stages/5', { action: 'save_note', note: 'version change' }); assert.equal((await preview({})).status, 409);
 });
+
+
+test('unreviewed outline preserves title ancestry across intervening body prose without inventing a review', async t => {
+  const document = headingDocument(); document.texts[2].label = 'section_header'; document.texts[2].level = 2;
+  document.body.children = [0, 1, 3, 2, 4, 5].map(index => ({ $ref: `#/texts/${index}` }));
+  const h = await harness(t, document), c = await h.context(), child = c.allTexts.find(row => row.ref === '#/texts/2');
+  assert.equal(child.initialDraft.parentRef, '#/texts/1'); assert.equal(child.initialDraft.level, 2);
+  assert.equal(child.initialDraft.status, ''); assert.equal((await h.state()).headingReviews.length, 0);
+});
+
+
+test('an uncertain originally classified heading remains in the outline instead of disappearing into missing candidates', async t => {
+  const h = await harness(t), item = (await h.context()).allTexts.find(item => item.ref === '#/texts/0');
+  const saved = await h.save([nonHeading(item, { isHeading: null, status: 'unjudgeable', reason: '제목 여부 보류', followUp: '원문 대조' })]); assert.equal(saved.status, 200);
+  const current = (await h.context()).allTexts.find(row => row.ref === item.ref); assert.equal(current.classifiedHeading, true); assert.equal(current.missingCandidate, false); assert.equal(current.initialDraft.isHeading, null);
+});
+
+
+test('an uncertain non-heading placeholder never becomes an impossible proposal parent', async t => {
+  const document = headingDocument(); document.texts[2].label = 'section_header'; document.texts[2].level = 2; document.body.children = [0, 2, 1, 3, 4, 5].map(index => ({ $ref: `#/texts/${index}` }));
+  const h = await harness(t, document), item = (await h.context()).allTexts.find(row => row.ref === '#/texts/0');
+  assert.equal((await h.save([nonHeading(item, { isHeading: null, status: 'unjudgeable', reason: '불확실한 원본 제목', followUp: '출처 확인' })])).status, 200);
+  const current = await h.context(), child = current.allTexts.find(row => row.ref === '#/texts/2');
+  assert.equal(current.allTexts.find(row => row.ref === item.ref).classifiedHeading, true); assert.equal(child.initialDraft.parentRef, ''); validateHeadingForest(current.allTexts.map(row => row.initialDraft), (_, message) => { throw Error(message); });
+});

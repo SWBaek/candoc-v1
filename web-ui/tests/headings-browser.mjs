@@ -96,7 +96,7 @@ export async function checkActualHeadingLayout(browser) {
     await page.screenshot({ path: 'qa/headings-reference-light-1512.png' });
     await page.getByText('활성 항목 판단·상세', { exact: true }).click(); await page.getByText('선택 원문·bbox·JSON 대조', { exact: true }).click();
     await expect(page.locator('.heading-source img')).toHaveAttribute('src', '/api/pages/49/image'); await expect(page.locator('.heading-source .reading-box')).toHaveCount(target.provenance.filter(p => p.page === 49 && p.rect).length);
-    await page.locator('.heading-inspector').scrollIntoViewIfNeeded(); await page.screenshot({ path: 'qa/headings-reference-source-light-1512.png' });
+    await page.locator('.heading-source img').evaluate(img => img.decode()); await page.locator('.heading-source .role-image-wrap').scrollIntoViewIfNeeded(); await page.screenshot({ path: 'qa/headings-reference-source-light-1512.png' });
     const state = await (await fetch(url + '/api/review')).json(); assert.equal(state.headingReviews.length, 0); assert.equal(state.outlinePages.length, 0); assert.ok(state.stages.every(row => row.status === 'pending')); assert.deepEqual(errors, []);
     console.log(`Stage 5 actual fixture layout passed: ${data.candidates.length} candidate rows/${data.allTexts.length} texts/all prov, whole TOC and range mode, two themes, 1920/1512/1366/1024/375/320px, contrast and representative 44px controls, no automatic judgments. Isolated DB.`);
   } finally { await context.close(); await app.close(); assert.equal(path.dirname(directory), path.resolve(tmpdir())); assert.ok(path.basename(directory).startsWith('candoc-real-heading-layout-')); await rm(directory, { recursive: true, force: true }); }

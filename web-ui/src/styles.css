@@ -408,3 +408,7 @@ h1 { font-size: var(--font-title); line-height: 1.35; font-weight: var(--weight-
   .heading-row-state { flex-basis: 62px; }
   .heading-indent { max-width: calc(3 * var(--space-3)); }
 }
+
+.heading-row-text .heading-depth { display: none; }
+.heading-selected .heading-row-text .heading-depth { display: inline; }
+@media (max-width: 600px) { .heading-row-text .heading-depth { display: inline; } }
