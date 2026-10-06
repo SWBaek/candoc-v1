@@ -10,3 +10,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# Local document fixtures and original assets are not source deliverables.
+working-project/*/raw/
+*.pdf
