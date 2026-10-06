@@ -11,6 +11,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   if (msg.method === 'initialized') return;
   if (msg.method === 'account/read') return result(msg.id, { account: { type: 'chatgpt' }, requiresOpenaiAuth: true });
   if (msg.method === 'model/list') return result(msg.id, { data: [{ model: 'test-model', displayName: 'Synthetic local model', isDefault: true, supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'medium' }], defaultReasoningEffort: 'medium' }], nextCursor: null });
+  assert.notEqual(mode, 'catalogue-only', 'connection verification must not start a model turn or read task configuration');
   if (msg.method === 'config/read') return result(msg.id, { config: { mcp_servers: { fixture: {} } } });
   if (msg.method === 'thread/start') {
     assert.equal(msg.params.sandbox, 'read-only'); assert.equal(msg.params.ephemeral, true); assert.equal(msg.params.approvalPolicy, 'never');

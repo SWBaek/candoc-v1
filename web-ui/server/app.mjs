@@ -12,6 +12,7 @@ import { createRoleAnnotationStore, runAnnotationSuggestions, validateAnnotation
 import { createReadingStore } from './reading-review.mjs';
 import { listHeadingModels, runHeadingSuggestions, validateHeadingSuggestions } from './heading-suggestions.mjs';
 import { createHeadingStore } from './heading-review.mjs';
+import { createProjectCodexSettings } from './project-codex-settings.mjs';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspace = path.resolve(appRoot, '..');
@@ -137,6 +138,7 @@ export function createReviewApp(options = {}) {
     if (!reviewColumns.has(name)) db.exec(`ALTER TABLE reviews ADD COLUMN ${name} ${definition}`);
   }
   const now = () => new Date().toISOString();
+  const codexSettings = createProjectCodexSettings({ db, cwd: workspace, modelRunner: options.codexModelRunner ?? options.roleModelRunner ?? options.headingModelRunner, fail: (status, message) => { throw new RequestError(status, message); } });
   let review = db.prepare('SELECT * FROM reviews WHERE source_hash = ? AND rule_hash = ?').get(source.sourceHash, source.ruleHash);
   if (!review) {
     db.exec('BEGIN IMMEDIATE');
@@ -254,6 +256,15 @@ export function createReviewApp(options = {}) {
         if (req.headers.origin && ![`http://127.0.0.1:${server.address().port}`, `http://localhost:${server.address().port}`].includes(req.headers.origin)) throw new RequestError(403, '같은 검수 화면에서 요청하세요.');
       }
       const pathname = new URL(req.url, 'http://localhost').pathname;
+      if (pathname === '/api/project/codex') {
+        if (req.method === 'GET') return send(res, 200, codexSettings.snapshot());
+        if (req.method === 'PUT') return send(res, 200, codexSettings.save(await bodyOf(req)));
+        throw new RequestError(405, '지원하지 않는 설정 요청입니다.');
+      }
+      if (pathname === '/api/project/codex/check' && req.method === 'POST') {
+        if (Object.keys(await bodyOf(req)).length) throw new RequestError(400, '연결 확인 요청은 빈 객체여야 합니다.');
+        const value = await codexSettings.check(); return send(res, value.connection.status === 'connected' ? 200 : 503, value);
+      }
       if (req.method === 'GET' && pathname === '/api/document') { assertInputUnchanged(); return send(res, 200, { ...source.metadata, sourceHash: source.sourceHash, ruleHash: source.ruleHash, pages: source.pages, storageFile: path.relative(workspace, dbPath).replaceAll('\\', '/') }); }
       if (req.method === 'GET' && pathname === '/api/review') { assertInputUnchanged(); return send(res, 200, snapshot()); }
       if (req.method === 'GET' && ['/api/heading-models', '/api/role-models'].includes(pathname)) {
@@ -269,7 +280,7 @@ export function createReviewApp(options = {}) {
       if (pathname === '/api/review/role-annotation-suggestions') {
         assertInputUnchanged();
         if (req.method === 'POST') {
-          const body = await bodyOf(req), { job, input } = roleAnnotations.createJob(body);
+          const rawBody = await bodyOf(req), body = { ...rawBody, ...codexSettings.resolve(rawBody) }, { job, input } = roleAnnotations.createJob(body);
           const controller = new AbortController(); annotationController = controller;
           annotationTask = Promise.resolve().then(async () => {
             try {
@@ -304,7 +315,7 @@ export function createReviewApp(options = {}) {
         assertInputUnchanged();
         if (req.method === 'GET') return send(res, 200, { ...headingJob, stale: headingJob.revision !== undefined && headingJob.revision !== snapshot().revision });
         if (req.method === 'POST') {
-          const body = await bodyOf(req);
+          const rawBody = await bodyOf(req), body = { ...rawBody, ...codexSettings.resolve(rawBody) };
           if (headingJob.status === 'running') throw new RequestError(409, '제목 추천을 생성 중입니다.');
           if (typeof body.model !== 'string' || !body.model || typeof body.effort !== 'string' || !body.effort || body.revision !== snapshot().revision) throw new RequestError(400, '현재 버전과 모델/Reasoning effort를 선택하세요.');
           const context = headingStore.context(), job = { id: randomUUID(), status: 'running', sourceHash: source.sourceHash, ruleHash: source.ruleHash, revision: body.revision, model: body.model, effort: body.effort, suggestions: [], error: null };
@@ -361,12 +372,13 @@ export function createReviewApp(options = {}) {
           const body = await bodyOf(req);
           if (Object.keys(body).length) throw new RequestError(400, '추천 시작 요청은 빈 객체여야 합니다.');
           if (suggestionJob.status === 'running') throw new RequestError(409, '이미 페이지 추천을 실행하고 있습니다.');
-          const job = { id: randomUUID(), status: 'running', sourceHash: source.sourceHash, ruleHash: source.ruleHash, suggestions: [], error: null };
+          const { model, effort } = codexSettings.resolve();
+          const job = { id: randomUUID(), status: 'running', sourceHash: source.sourceHash, ruleHash: source.ruleHash, model: model ?? null, effort: effort ?? null, suggestions: [], error: null };
           const controller = new AbortController();
           suggestionJob = job; suggestionController = controller;
           suggestionTask = Promise.resolve().then(async () => {
             try {
-              const suggestions = await (options.suggestionRunner ?? runCodexSuggestions)({ pages: source.suggestionInput, cwd: workspace, signal: controller.signal });
+              const suggestions = await (options.suggestionRunner ?? runCodexSuggestions)({ pages: source.suggestionInput, cwd: workspace, signal: controller.signal, selectedModel: model, selectedEffort: effort });
               if (controller.signal.aborted) { job.status = 'cancelled'; return; }
               assertInputUnchanged();
               job.suggestions = validateSuggestions({ suggestions }, source.pages.map(page => page.number));
@@ -457,6 +469,7 @@ export function createReviewApp(options = {}) {
     }
   });
   return { server, dbPath, source, close: async () => {
+    await codexSettings.close();
     annotationController?.abort(); await annotationTask;
     headingController?.abort(); await headingTask;
     suggestionController?.abort();

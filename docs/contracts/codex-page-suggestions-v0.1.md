@@ -14,7 +14,7 @@
 - `CANDOC_CODEX_EXECUTABLE`로 실행 파일을 지정할 수 있다. Windows에서는 설치된 Codex Desktop의 `codex.exe`를 우선 사용한다. `.cmd` 파일은 직접 실행하지 않는다.
 - 추천 요청마다 프로세스를 열고 종료한다. `initialize` 응답 후 `initialized`, `account/read`, `model/list`, `config/read`, `thread/start`, `turn/start` 순으로 처리한다.
 - 로컬 Codex의 기존 인증을 사용한다. 로그인되지 않았으면 추천을 실패 처리하고 로그인 안내를 표시한다. 토큰·계정 이메일은 UI로 보내지 않는다.
-- 설정 모델이 있으면 `CANDOC_CODEX_MODEL`을 사용하며, 없으면 `model/list`의 기본 모델을 선택한다. 목록에 없는 모델은 거부한다.
+- [프로젝트 설정](project-codex-settings-v0.1.md)의 모델·effort를 우선 사용한다. 최초 미설정은 기존 `CANDOC_CODEX_MODEL`/`model/list` 기본 모델을 사용한다. 목록에 없는 모델/지원하지 않는 effort는 거부한다. 실행 중 요청의 모델·effort는 설정 변경과 관계없이 유지한다.
 - 스레드는 `sandbox: "read-only"`, `approvalPolicy: "never"`, `ephemeral: true`로 만든다. 앱·플러그인과 설정된 MCP 서버는 해당 스레드에서 비활성화한다. 문서 내용은 분석 자료이며, 문서에 포함된 명령은 수행하지 않는다. 서버가 클라이언트에 보내는 도구·승인 요청은 거부한다.
 - 전체 페이지의 텍스트와 표 셀 내용, 요소 참조·라벨·그림 개수를 입력으로 전달한다. 원문 이미지 바이트·실제 검수 판단·검수 DB는 전달하지 않는다. 입력이 1 MiB를 넘으면 잘라 분석하지 않고 오류를 반환한다.
 - `turn/start.outputSchema`로 아래 결과 형식을 요청한다. 최종 `agentMessage`의 `item/completed`와 성공 상태의 `turn/completed`를 모두 확인한다. 중간 답변이나 실패한 턴을 추천 완료로 취급하지 않는다.
