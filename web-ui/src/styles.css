@@ -136,6 +136,34 @@ h1 { font-size: var(--font-title); line-height: 1.35; font-weight: var(--weight-
 .ai-panel-backdrop { display: none; }
 .ai-page-hint { display: block; color: var(--muted); font-size: var(--font-caption); margin-top: var(--space-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .role-review { min-width: 0; }
+.role-questions > select { width: 100%; }
+.role-question-heading { margin: var(--space-4) 0; }
+.role-question-heading h2 { font-size: var(--font-body); font-weight: var(--weight-semibold); margin-bottom: var(--space-2); }
+.role-question-range, .role-question-text, .role-response, .role-question-source, .role-question-tools { font-size: var(--font-label); overflow-wrap: anywhere; }
+.role-representatives { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.role-representatives:has(> :only-child) { grid-template-columns: minmax(0, 1fr); max-width: 600px; }
+.role-source-caption { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
+.role-source-caption button { margin-left: auto; }
+.role-source-caption select { max-width: 140px; }
+.role-question-source pre { max-height: 280px; overflow: auto; font-size: var(--font-caption); background: var(--soft); }
+.role-question-source .role-image-wrap { margin: 0; }
+.role-focus-crop { overflow: hidden; border: var(--stroke) solid var(--border); background: var(--soft); }
+.role-focus-crop .role-page-image { position: absolute; max-width: none; border: 0; }
+.role-active-source .role-source-caption strong { color: var(--primary); }
+.role-context-bbox { border-style: dashed; border-color: var(--muted); background: transparent; }
+.role-question-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0; padding-top: var(--space-3); border-top: var(--stroke) solid var(--border); }
+.role-response { padding: var(--space-3); background: var(--soft); border-radius: var(--radius-panel); }
+.role-response p { margin-bottom: var(--space-2); }
+.role-response label { display: block; margin-bottom: var(--space-2); }
+.role-page-overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
+.role-page-elements { max-height: 70vh; overflow: auto; }
+.role-page-row { flex: 1; min-width: 0; height: auto; min-height: var(--control-touch); padding: var(--space-2); justify-content: flex-start; text-align: left; white-space: normal; color: var(--foreground); line-height: var(--line-body); }
+.role-page-row[aria-pressed="true"] { background: var(--current); }
+.role-check { display: flex; gap: var(--space-2); align-items: center; min-height: var(--control-touch); font-size: var(--font-label); }
+.role-check input { width: var(--control-touch); height: var(--control-touch); flex-shrink: 0; accent-color: var(--primary); }
+.role-question-tools { border-top: var(--stroke) solid var(--border); margin-top: var(--space-4); }
+.role-questions summary { min-height: var(--control-touch); display: flex; align-items: center; cursor: pointer; }
+@media (max-width: 700px) { .role-page-overview { grid-template-columns: minmax(0, 1fr); } .role-representatives { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; } .role-representatives > article { flex: 0 0 88%; min-width: 0; scroll-snap-align: start; } .role-representatives:has(> :only-child) > article { flex-basis: 100%; } }
 .role-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
 .role-toolbar > span, .role-scope-note { color: var(--muted); font-size: var(--font-label); }
 .role-toolbar label { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; flex: 1; }

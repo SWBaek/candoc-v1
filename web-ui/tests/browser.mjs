@@ -431,6 +431,7 @@ try {
   } finally { await invalidPage.close(); await invalidApp.close(); }
   await checkSuggestionUI(browser);
   await checkRoleUI(browser);
+  await (await import('./role-questions-browser.mjs')).checkRoleQuestionsUI(browser);
   await checkActualRoleLayout(browser);
   await checkReadingUI(browser);
   await checkActualReadingLayout(browser);

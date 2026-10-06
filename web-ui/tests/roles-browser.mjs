@@ -23,7 +23,7 @@ export async function checkRoleUI(browser) {
     await put('/api/review/pages/1', { status: 'excluded', reason: '검사 범위 밖 표지', note: '', evidence: 'json' });
     await put('/api/review/roles', initialJudgment);
     await page.goto(url); await page.locator('[data-stage-id="3"]').click();
-    await expect(page.getByRole('heading', { name: '영역·큰 역할·소속', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '영역·큰 역할·소속', exact: true })).toBeVisible(); await page.getByLabel('영역 검수 보기', { exact: true }).selectOption('direct');
     await expect(page.locator('.role-group-summary')).toContainText('전체 4개 / 범위 내 3개 / 선택 3개');
     await expect(page.getByLabel('#/texts/0 일괄 대상', { exact: true })).toBeDisabled();
     await expect(page.getByLabel('#/texts/0 일괄 대상', { exact: true })).not.toBeChecked();
@@ -45,7 +45,7 @@ export async function checkRoleUI(browser) {
     let saved = await state(); assert.deepEqual(saved.roleReviews.map(row => row.ref), ['#/texts/1', '#/texts/9']);
     assert.equal(saved.roleReviews.find(row => row.ref === '#/texts/9').parentRef, '#/furniture');
     assert.ok(!saved.roleReviews.some(row => row.ref === '#/texts/2'));
-    await page.reload(); await expect(page.getByRole('button', { name: '직전 일괄 판단 복원', exact: true })).toBeEnabled();
+    await page.reload(); await page.getByLabel('영역 검수 보기', { exact: true }).selectOption('direct'); await expect(page.getByRole('button', { name: '직전 일괄 판단 복원', exact: true })).toBeEnabled();
     assert.deepEqual((await state()).roleReviews, saved.roleReviews);
     await page.getByRole('button', { name: '직전 일괄 판단 복원', exact: true }).click();
     await expect.poll(async () => (await state()).roleReviews.length).toBe(1);
@@ -69,7 +69,7 @@ export async function checkRoleUI(browser) {
     await page.getByLabel('후속 확인 · 필수', { exact: true }).fill('원본 PDF와 대조해 출처 확인');
     await page.getByRole('button', { name: '요소 판단 저장', exact: true }).click();
     await expect(page.locator('.saved-status')).toHaveText('저장됨');
-    await page.reload(); await page.getByRole('button', { name: '개별 요소 검토', exact: true }).click();
+    await page.reload(); await page.getByLabel('영역 검수 보기', { exact: true }).selectOption('direct'); await page.getByRole('button', { name: '개별 요소 검토', exact: true }).click();
     await page.getByLabel('영역 검수 원본 페이지', { exact: true }).selectOption('0');
     await expect(page.getByLabel('후속 확인 · 필수', { exact: true })).toHaveValue('원본 PDF와 대조해 출처 확인');
     await page.getByLabel('영역 검수 원본 페이지', { exact: true }).selectOption('2');
@@ -85,10 +85,10 @@ export async function checkRoleUI(browser) {
     await expect(page.getByLabel('판단 근거·사유 · 필수', { exact: true })).toHaveValue('충돌 시에도 보존할 초안');
     assert.ok(!(await state()).roleReviews.some(row => row.ref === '#/tables/0'));
     await page.getByRole('button', { name: '판단 초안 취소', exact: true }).click(); await page.reload();
-    await expect(page.getByRole('heading', { name: '영역·큰 역할·소속', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '영역·큰 역할·소속', exact: true })).toBeVisible(); await page.getByLabel('영역 검수 보기', { exact: true }).selectOption('direct');
     const persisted = await state();
     await app.close(); app = createReviewApp({ projectDir: directory, dbPath }); await new Promise(resolve => app.server.listen(port, '127.0.0.1', resolve));
-    await page.reload(); await expect(page.getByRole('heading', { name: '영역·큰 역할·소속', exact: true })).toBeVisible(); assert.deepEqual(await state(), persisted);
+    await page.reload(); await expect(page.getByRole('heading', { name: '영역·큰 역할·소속', exact: true })).toBeVisible(); await page.getByLabel('영역 검수 보기', { exact: true }).selectOption('direct'); assert.deepEqual(await state(), persisted);
     await page.getByLabel('반복 후보 선택', { exact: true }).selectOption({ index: 1 });
     await expect(page.locator('.role-group-summary')).toContainText('페이지 번호 후보');
     await expect(page.locator('.role-members')).toContainText('iii');
@@ -107,9 +107,11 @@ export async function checkActualRoleLayout(browser) {
   const context = await browser.newContext({ viewport: { width: 1512, height: 982 }, isMobile: false, hasTouch: true }), page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   try {
-    await page.goto(url); await page.locator('[data-stage-id="3"]').click(); await expect(page.locator('.role-group-summary')).toBeVisible();
+    await page.goto(url); await page.locator('[data-stage-id="3"]').click(); await expect(page.locator('.role-question-heading')).toBeVisible();
     for (const theme of ['밝은 테마', '어두운 테마']) {
       await page.getByRole('button', { name: theme, exact: true }).click();
+      for (const view of ['questions', 'pages']) {
+        await page.getByLabel('영역 검수 보기', { exact: true }).selectOption(view);
       for (const width of [1512, 1024, 375, 320]) {
         await page.setViewportSize({ width, height: 982 });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `role overflow at ${width}px in ${theme}`);
@@ -119,12 +121,24 @@ export async function checkActualRoleLayout(browser) {
           return { ratio: (levels[0] + .05) / (levels[1] + .05), font: parseFloat(getComputedStyle(element).fontSize) };
         });
         assert.ok(contrast.ratio >= 4.5 && contrast.font >= 12, `${theme} role readability: ${JSON.stringify(contrast)}`);
-        for (const control of await page.locator('.role-review button, .role-review select, .role-member input').all()) { const box = await control.boundingBox(); if (box) assert.ok(box.width >= 44 && box.height >= 44, 'role touch target must be 44px'); }
-        if (width === 1512 || width === 375) await page.screenshot({ path: `qa/roles-${theme === '밝은 테마' ? 'light' : 'dark'}-${width}.png` });
+        for (const control of await page.locator('.role-review button, .role-review select, .role-member input').all()) { if (!await control.isVisible()) continue; const box = await control.boundingBox(); if (box) assert.ok(box.width >= 44 && box.height >= 44, 'role touch target must be 44px: ' + await control.evaluate(el => el.outerHTML) + JSON.stringify(box)); }
+        if (view === 'pages') {
+          await expect.poll(async () => page.locator('.role-page-row').first().evaluate(element => {
+            const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+            const levels = [luminance(getComputedStyle(element).color), luminance(getComputedStyle(element).backgroundColor === 'rgba(0, 0, 0, 0)' ? getComputedStyle(element.closest('.app-shell')).backgroundColor : getComputedStyle(element).backgroundColor)].sort((a,b)=>b-a);
+            return (levels[0]+.05)/(levels[1]+.05);
+          })).toBeGreaterThanOrEqual(4.5);
+          for (const row of await page.locator('.role-page-row').all()) {
+            const bounds = await row.evaluate(element => ({ row: element.getBoundingClientRect().toJSON(), content: element.firstElementChild.getBoundingClientRect().toJSON() }));
+            assert.ok(bounds.content.top >= bounds.row.top - 1 && bounds.content.bottom <= bounds.row.bottom + 1, `long page text stays inside its own row at ${width}px`);
+          }
+        }
+        if (width === 1512 || width === 375) await page.screenshot({ path: `qa/role-questions-${view === 'pages' ? 'pages-' : ''}${theme === '밝은 테마' ? 'light' : 'dark'}-${width}.png` });
+      }
       }
       await page.setViewportSize({ width: 1512, height: 982 });
     }
     const state = await (await fetch(url + '/api/review')).json(); assert.equal(state.roleReviews.length, 0); assert.ok(state.stages.every(stage => stage.status === 'pending')); assert.deepEqual(errors, []);
-    console.log(`Stage 3 actual-input layout passed: ${state.roleCoverage.total} items, groups/no auto decisions, 1512/1024/375/320px, two themes, contrast and 44px touch targets. Isolated DB; no model calls.`);
+    console.log(`Stage 3 actual-input layout passed: ${state.roleCoverage.total} items, questions first/page overview/no auto decisions, 1512/1024/375/320px, two themes, contrast and 44px touch targets. Isolated DB; no model calls.`);
   } finally { await context.close(); await app.close(); assert.equal(path.dirname(directory), path.resolve(tmpdir())); assert.ok(path.basename(directory).startsWith('candoc-real-role-layout-')); await rm(directory, { recursive: true, force: true }); }
 }

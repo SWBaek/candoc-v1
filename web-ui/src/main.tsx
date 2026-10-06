@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Icon, type IconName } from '@/components/icon';
 import { PageSuggestions } from '@/components/page-suggestions';
-import { RoleReview, type RoleReviewHandle } from '@/components/role-review';
+import { RoleReview, type RoleReviewHandle } from '@/components/role-question-review';
 import { HeadingReview } from '@/components/heading-review';
 import { ReadingReview } from '@/components/reading-review';
 import type { DecisionStatus, DocumentInfo, ElementInfo, Evidence, PageDecision, PageInfo, PageSuggestion, Review, Stage } from './types';
@@ -17,7 +17,7 @@ const stageHints = [
   '', // Stored legacy stage 0 is now the document-info view.
   '', // Stored legacy stage 1 is no longer a user review step.
   '원문 페이지 이미지를 보며 포함·제외·보류를 판단하세요. 표지나 목차를 자동으로 제외하지 않습니다.',
-  '머리말·꼬리말·본문·각주 영역과 표·그림 내부 텍스트의 큰 역할과 소속을 확인하세요.',
+  '반복 요소와 분류 의심을 질문으로 확인하고, 나머지는 페이지별로 훑어보세요.',
   '영역 내 읽기 순서와 페이지를 넘어 이어지는 문단·표·각주의 연결을 확인하세요.',
   '전체 목차에서 의심 항목을 확인하고 계층을 조정하세요.',
   '캡션·각주·주석과 본문 참조가 관련 표·그림·요소에 올바르게 연결됐는지 확인하세요.',

@@ -8,9 +8,9 @@ const roleNames: Record<CoarseRole, string> = { header: '반복 머리말', foot
 const statusNames = { normal: '정상', error: '오류 확인', suspected: '의심', unjudgeable: '판단 불가' };
 const empty = (): RoleDraft => ({ status: '', region: 'unknown', role: 'unknown', parentRef: '', reason: '', evidence: 'json', followUp: '' });
 export type RoleReviewHandle = { save: () => Promise<boolean>; discard: () => void };
-type Props = { document: DocumentInfo; review: Review; busy: boolean; onDirty: (dirty: boolean, valid: boolean) => void; onNavigate: (action: () => Promise<void>) => void; onMutate: (url: string, payload: object) => Promise<boolean>; onEnlarge: (page: number) => void; stageNote: string; onNote: (value: string) => void; stageDirty: boolean; onStage: (action: 'save_note' | 'complete' | 'reopen') => Promise<boolean> };
+export type RoleReviewProps = { questionHold?: boolean; initialRef?: string; initialGroupId?: string; document: DocumentInfo; review: Review; busy: boolean; onDirty: (dirty: boolean, valid: boolean) => void; onNavigate: (action: () => Promise<void>) => void; onMutate: (url: string, payload: object) => Promise<boolean>; onEnlarge: (page: number) => void; stageNote: string; onNote: (value: string) => void; stageDirty: boolean; onStage: (action: 'save_note' | 'complete' | 'reopen') => Promise<boolean> };
 
-export const RoleReview = forwardRef<RoleReviewHandle, Props>(function RoleReview({ document, review, busy, onDirty, onNavigate, onMutate, onEnlarge, stageNote, onNote, stageDirty, onStage }, ref) {
+export const RoleReview = forwardRef<RoleReviewHandle, RoleReviewProps>(function RoleReview({ questionHold, initialRef, initialGroupId, document, review, busy, onDirty, onNavigate, onMutate, onEnlarge, stageNote, onNote, stageDirty, onStage }, ref) {
   const [data, setData] = useState<{ items: RoleElement[]; targets: RoleTarget[]; groups: RepeatGroup[] } | null>(null), [error, setError] = useState('');
   const [mode, setMode] = useState<'groups' | 'individual'>('groups');
   const [groupId, setGroupId] = useState(''), [elementRef, setElementRef] = useState(''), [pageNo, setPageNo] = useState(0);
@@ -44,7 +44,10 @@ export const RoleReview = forwardRef<RoleReviewHandle, Props>(function RoleRevie
       if (!response.ok) throw new Error(value.error);
       if (value.sourceHash !== document.sourceHash || value.ruleHash !== document.ruleHash) throw new Error('검수 대상 문서가 바뀌었습니다. 새로고침하세요.');
       setData(value);
-      if (value.groups.length) openGroup(value.groups[0], value.items);
+      const initial = value.items.find((item: RoleElement) => item.ref === initialRef);
+      if (initialGroupId && value.groups.some((group: RepeatGroup) => group.id === initialGroupId)) openGroup(value.groups.find((group: RepeatGroup) => group.id === initialGroupId), value.items);
+      else if (initial) openElement(initial);
+      else if (value.groups.length) openGroup(value.groups[0], value.items);
       else { setMode('individual'); const item = value.items.find(inScope); if (item) openElement(item); }
     } catch (error) { setError((error as Error).message); }
   }
@@ -65,7 +68,7 @@ export const RoleReview = forwardRef<RoleReviewHandle, Props>(function RoleRevie
   const changeDraft = (value: Partial<RoleDraft>) => setDraft({ ...draft, ...value });
   const pageItems = data?.items.filter(item => inScope(item) && (pageNo === 0 ? !item.pages.length : item.pages.includes(pageNo))) ?? [];
   const c = review.roleCoverage, stage = review.stages.find(stage => stage.id === 3)!;
-  const ready = !c.unsettledPages.length && !c.unreviewed && !c.needsReview && !c.suspected;
+  const ready = !questionHold && !c.unsettledPages.length && !c.unreviewed && !c.needsReview && !c.suspected;
   if (!data) return <div role={error ? 'alert' : 'status'}>{error || '영역 검수 대상을 읽고 있습니다…'}{error && <Button variant="outline" onClick={() => void load()}>다시 불러오기</Button>}</div>;
   return <section className="role-review" aria-label="영역·큰 역할·소속 검수">
     <div className="role-toolbar"><Button size="sm" variant={mode === 'groups' ? 'default' : 'outline'} onClick={() => change(() => data.groups.length && openGroup(group ?? data.groups[0]))}>반복 요소 묶음</Button><Button size="sm" variant={mode === 'individual' ? 'default' : 'outline'} onClick={() => change(() => { const item = element && inScope(element) ? element : data.items.find(inScope); if (item) openElement(item); })}>개별 요소 검토</Button><span>검사 대상 {c.total}개 · 기록 {c.reviewed} · 미검수 {c.unreviewed} · 재검토 {c.needsReview} · 의심 {c.suspected}</span></div>
@@ -99,6 +102,6 @@ export const RoleReview = forwardRef<RoleReviewHandle, Props>(function RoleRevie
       </div>
       {mode === 'groups' && <section className="role-members" aria-label="반복 후보 대상·예외"><h2>대상별 확인 · 체크 해제로 예외 제외</h2><div className="record-actions"><Button size="sm" variant="outline" disabled={busy} onClick={() => setSelected(activeMembers.map(item => item.ref))}>범위 내 전체 선택</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => setSelected([])}>묶음 선택 해제</Button></div>{members.map(item => { const record = saved.get(item.ref), active = inScope(item); return <div className="role-member" key={item.ref}><label><input type="checkbox" aria-label={`${item.ref} 일괄 대상`} disabled={busy || !active} checked={selected.includes(item.ref)} onChange={event => setSelected(event.target.checked ? [...selected, item.ref] : selected.filter(ref => ref !== item.ref))} /><span>원본 {item.pages.join(', ')}페이지 · {item.ref}<small>{item.text}</small></span></label><span>{!active ? '범위 밖' : record?.needsReview ? '재검토' : record ? statusNames[record.status] : '미검수'}</span><Button size="sm" variant="ghost" disabled={busy || !active} aria-label={`${item.ref} 개별 판정`} onClick={() => change(() => openElement(item))}>개별 판정</Button></div>; })}</section>}
     </>}
-    <section className="role-completion"><h2>영역 검수 범위와 완료</h2><p>미검수·재검토·의심 항목이 없어야 완료할 수 있습니다. 판단 불가는 이유와 후속 확인을 남깁니다. 제외 페이지는 세부 검수 범위에서 빠집니다.</p><label className="field-label" htmlFor="stage-note">전체 검토 범위·근거·미확인 사항</label><Textarea id="stage-note" value={stageNote} maxLength={10000} disabled={busy} onChange={event => onNote(event.target.value)} /><div className="record-actions"><Button variant="outline" disabled={busy || !stageDirty} onClick={() => onNote(stage.note)}>메모 초안 취소</Button><Button variant="outline" disabled={busy || !stageDirty || dirty} onClick={() => void onStage('save_note')}>메모 저장</Button><Button disabled={busy || dirty || !stageNote.trim() || (stage.status !== 'completed' && !ready)} onClick={() => void onStage(stage.status === 'completed' ? 'reopen' : 'complete')}>{stage.status === 'completed' ? '완료 취소' : '영역 검수 완료 기록'}</Button></div></section>
+    <section className="role-completion">{questionHold && <p>보류한 질문의 후속 확인이 남아 있습니다.</p>}<h2>영역 검수 범위와 완료</h2><p>미검수·재검토·의심 항목이 없어야 완료할 수 있습니다. 판단 불가는 이유와 후속 확인을 남깁니다. 제외 페이지는 세부 검수 범위에서 빠집니다.</p><label className="field-label" htmlFor="stage-note">전체 검토 범위·근거·미확인 사항</label><Textarea id="stage-note" value={stageNote} maxLength={10000} disabled={busy} onChange={event => onNote(event.target.value)} /><div className="record-actions"><Button variant="outline" disabled={busy || !stageDirty} onClick={() => onNote(stage.note)}>메모 초안 취소</Button><Button variant="outline" disabled={busy || !stageDirty || dirty} onClick={() => void onStage('save_note')}>메모 저장</Button><Button disabled={busy || dirty || !stageNote.trim() || (stage.status !== 'completed' && !ready)} onClick={() => void onStage(stage.status === 'completed' ? 'reopen' : 'complete')}>{stage.status === 'completed' ? '완료 취소' : '영역 검수 완료 기록'}</Button></div></section>
   </section>;
 });
