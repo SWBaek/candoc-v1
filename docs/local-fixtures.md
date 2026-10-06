@@ -11,6 +11,6 @@ cd C:\Projects\candoc-v1\web-ui
 npm start -- --project C:\CanDocFixtures\ieee-1547
 ```
 
-기존 fixture의 입력 SHA-256은 `bc2986e0685472527debf1c85129a17041501f8441270c0e69069732ca91ccff`다. 입력과 이미지가 없는 소스 checkout만으로 실제 문서 검사를 재현할 수는 없다. 테스트 fixture 위치와 준비 조건은 web-ui README에서 안내한다.
+기존 fixture의 입력 SHA-256은 `bc2986e0685472527debf1c85129a17041501f8441270c0e69069732ca91ccff`다. 입력과 이미지가 없는 소스 checkout만으로 실제 문서 검사를 재현할 수는 없다. 회귀 검사는 `CANDOC_FIXTURE_PROJECT` 환경 변수로 저장소 외부 fixture 프로젝트를 지정할 수 있다. 테스트 DB는 별도 임시 디렉터리에 생성한다. 자세한 준비 조건은 [web-ui README](../web-ui/README.md#파일과-저장)에서 안내한다.
 
 기준 커밋 `c83f2f5`에는 입력 JSON과 PNG가 이미 포함됐다. 이후 별도 커밋에서 `.gitignore`와 `git rm --cached`로 현재 추적만 해제했다. 기준 커밋을 삭제하거나 이력을 재작성하지 않았으므로 **원본 입력은 기준 커밋 이력에 남아 있다.** 로컬 작업 파일은 그대로 보존한다.

@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Icon, type IconName } from '@/components/icon';
 import { PageSuggestions } from '@/components/page-suggestions';
+import { RoleReview, type RoleReviewHandle } from '@/components/role-review';
 import type { DecisionStatus, DocumentInfo, ElementInfo, Evidence, PageDecision, PageInfo, PageSuggestion, Review, Stage } from './types';
 
 const labels: Record<DecisionStatus, string> = { unreviewed: '미검수', included: '포함', excluded: '제외', pending: '보류' };
@@ -54,6 +55,8 @@ function App() {
   const [thumbnailSize, setThumbnailSize] = useState(240);
   const [showText, setShowText] = useState(false);
   const [suggestions, setSuggestions] = useState<PageSuggestion[]>([]);
+  const [roleDirty, setRoleDirty] = useState(false), [roleValid, setRoleValid] = useState(false);
+  const roleRef = useRef<RoleReviewHandle>(null);
   const [sidePanel, setSidePanel] = useState<'none' | 'ai' | 'detail'>('none');
   const [aiPanelHost, setAiPanelHost] = useState<HTMLDivElement | null>(null);
   const [elements, setElements] = useState<ElementInfo[] | null>(null);
@@ -100,7 +103,7 @@ function App() {
   useEffect(() => { if (review) setThumbnailSize(review.thumbnailSize); }, [review?.thumbnailSize]);
   const pageDirty = !!(draft && decision && page && !same(draft, draftOf(decision, page)));
   const stageDirty = stageNote !== (stage?.note ?? '');
-  const dirty = pageDirty || stageDirty;
+  const dirty = pageDirty || stageDirty || roleDirty;
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => { if (dirty || (bulkOpen && (bulkDraft.reason || bulkDraft.note))) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler);
@@ -152,6 +155,7 @@ function App() {
     return saved;
   }
   async function saveDrafts() {
+    if (roleDirty && !(await roleRef.current?.save())) return false;
     if (pageDirty && !(await saveDecision())) return false;
     if (stageDirty && !(await saveStage('save_note'))) return false;
     return true;
@@ -215,7 +219,7 @@ function App() {
   }
   async function proceedUnsaved(save: boolean) {
     if (save && !(await saveDrafts())) { setUnsavedPrompt(false); pendingAction.current = null; return; }
-    if (!save && decision && page) { setDraft(draftOf(decision, page)); setStageNote(stage?.note ?? ''); }
+    if (!save && decision && page) { roleRef.current?.discard(); setDraft(draftOf(decision, page)); setStageNote(stage?.note ?? ''); }
     const action = pendingAction.current;
     pendingAction.current = null; setUnsavedPrompt(false);
     await action?.();
@@ -301,7 +305,7 @@ function App() {
             <Button className="selection-complete" size="sm" variant={stage.status === 'completed' || review.selectedPages.length > 0 ? 'outline' : 'default'} disabled={busy || dirty || (stage.status !== 'completed' && counts.pending > 0)} title={counts.pending ? `보류 ${counts.pending}페이지를 먼저 확인하세요.` : `제외 ${counts.excluded}페이지 외의 나머지 ${document.pageCount - counts.excluded}페이지를 포함합니다.`} onClick={() => saveStage(stage.status === 'completed' ? 'reopen' : 'complete', stage.status !== 'completed')}>{stage.status === 'completed' ? '완료 취소' : counts.unreviewed ? '나머지 유지하고 완료' : '페이지 선별 완료 기록'}</Button>
           </div>
           <div className="stage-completion"><div><strong>{counts.pending ? `보류 ${counts.pending}페이지를 먼저 확인하세요.` : pageSelectionReady ? '모든 페이지의 포함·제외 판단이 기록되었습니다.' : `제외 ${counts.excluded}페이지 · 나머지 ${document.pageCount - counts.excluded}페이지 유지`}</strong><p>{counts.pending ? '보류 페이지의 포함·제외를 결정하면 선별을 완료할 수 있습니다.' : '하단 완료 버튼으로 남은 페이지를 유지하고 페이지 선별을 마칩니다. 이후 구조·내용 검수는 계속 진행합니다.'}</p></div></div>
-        </> : <>
+        </> : stage.id === 3 ? <RoleReview ref={roleRef} document={document} review={review} busy={busy} onDirty={(dirty, valid) => { setRoleDirty(dirty); setRoleValid(valid); }} onNavigate={guard} onMutate={mutate} onEnlarge={enlarge} stageNote={stageNote} onNote={setStageNote} stageDirty={stageDirty} onStage={saveStage} /> : <>
           <section className="stage-record"><Badge variant="outline">수동 검토 기록</Badge><h2>검토한 범위와 근거를 남기세요.</h2><p>이 단계의 전용 검사·편집 화면은 후속 구현 대상입니다. 별도로 검토한 내용을 저장하고, 확인이 끝난 경우에만 완료를 기록하세요.</p><label className="field-label" htmlFor="stage-note">검토 메모 · 완료 기록 시 필수</label><Textarea id="stage-note" value={stageNote} maxLength={10000} disabled={busy} onChange={event => setStageNote(event.target.value)} placeholder="검사 범위, 사용한 근거, 판단, 미확인 사항과 후속 검토" className="stage-note" /><div className="record-actions"><Button variant="outline" disabled={busy || !stageDirty} onClick={() => setStageNote(stage.note)}>초안 취소</Button><Button variant="outline" disabled={busy || !stageDirty} onClick={() => saveStage('save_note')}>메모 저장</Button><Button disabled={busy || !stageNote.trim() || (stage.id === 12 && (!pageSelectionReady || review.stages.some(item => item.id < 12 && item.status !== 'completed')))} onClick={() => saveStage(stage.status === 'completed' ? 'reopen' : 'complete')}>{stage.status === 'completed' ? '완료 취소' : stage.status === 'needs_review' ? '재검토 완료 기록' : '수동 검토 완료 기록'}</Button></div></section>
         </>}
         <div className="notice" role="status">{notice}</div>
@@ -310,7 +314,7 @@ function App() {
     </main>
     {imagePage && <div className="modal-backdrop"><div className="image-modal" role="dialog" aria-modal="true" aria-labelledby="image-modal-title"><div className="modal-header"><strong id="image-modal-title">원본 {imagePage.number}페이지</strong><Button variant="outline" ref={imageCloseRef} onClick={() => setEnlargedPage(null)}>닫기</Button></div><div className="large-image">{imagePage.imageAvailable ? <img src={imagePage.imageUrl} alt={`원본 ${imagePage.number}페이지 확대 이미지`} /> : <p>이 페이지의 원문 이미지가 없습니다.</p>}</div></div></div>}
     {bulkOpen && <div className="modal-backdrop"><div className="bulk-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-title"><h2 id="bulk-title">선택한 {bulkPages.length}페이지 {labels[bulkDraft.status]}</h2><p className="bulk-page-numbers">원본 페이지: {bulkPages.slice().sort((a, b) => a - b).join(', ')}</p><label className="field-label" htmlFor="bulk-reason">공통 판단 사유{bulkDraft.status === 'excluded' ? ' · 필수' : ' · 선택'}</label><Textarea id="bulk-reason" ref={bulkReasonRef} maxLength={10000} value={bulkDraft.reason} onChange={event => setBulkDraft({ ...bulkDraft, reason: event.target.value })} placeholder={bulkDraft.status === 'excluded' ? '제외 사유와 세부 검수하지 않을 범위' : '포함하거나 제외를 취소하는 판단 근거'} /><label className="field-label" htmlFor="bulk-evidence">사용한 근거</label><select id="bulk-evidence" value={bulkDraft.evidence} onChange={event => setBulkDraft({ ...bulkDraft, evidence: event.target.value as Evidence })}><option value="page_image" disabled={bulkPages.some(number => !document.pages.find(page => page.number === number)?.imageAvailable)}>원문 페이지 이미지</option><option value="json">JSON 내부 근거</option><option value="both" disabled={bulkPages.some(number => !document.pages.find(page => page.number === number)?.imageAvailable)}>페이지 이미지 + JSON</option></select><label className="field-label" htmlFor="bulk-note">공통 검토 메모 · 선택</label><Textarea id="bulk-note" maxLength={10000} value={bulkDraft.note} onChange={event => setBulkDraft({ ...bulkDraft, note: event.target.value })} placeholder="인접 페이지와 연결되는 내용 등 후속 확인 사항" /><p className="panel-footnote">각 페이지에 같은 사유·근거를 기록하며 원본은 보존합니다.</p><div className="prompt-actions"><Button variant="outline" disabled={busy} onClick={() => setBulkOpen(false)}>취소</Button><Button disabled={busy || (bulkDraft.status === 'excluded' && !bulkDraft.reason.trim())} onClick={saveBulk}>{bulkPages.length}페이지 {labels[bulkDraft.status]} 저장</Button></div></div></div>}
-    {unsavedPrompt && <div className="modal-backdrop"><div className="unsaved-modal" role="dialog" aria-modal="true" aria-labelledby="unsaved-title"><h2 id="unsaved-title">저장하지 않은 변경이 있습니다.</h2><p>현재 초안을 저장하거나 취소한 뒤 이동할 수 있습니다.</p><div className="prompt-actions"><Button variant="outline" ref={cancelRef} disabled={busy} onClick={() => { pendingAction.current = null; setUnsavedPrompt(false); }}>현재 화면 유지</Button><Button variant="outline" disabled={busy} onClick={() => proceedUnsaved(false)}>초안 취소 후 이동</Button><Button disabled={busy || (pageDirty && !validDraft)} onClick={() => proceedUnsaved(true)}>저장 후 이동</Button></div></div></div>}
+    {unsavedPrompt && <div className="modal-backdrop"><div className="unsaved-modal" role="dialog" aria-modal="true" aria-labelledby="unsaved-title"><h2 id="unsaved-title">저장하지 않은 변경이 있습니다.</h2><p>현재 초안을 저장하거나 취소한 뒤 이동할 수 있습니다.</p><div className="prompt-actions"><Button variant="outline" ref={cancelRef} disabled={busy} onClick={() => { pendingAction.current = null; setUnsavedPrompt(false); }}>현재 화면 유지</Button><Button variant="outline" disabled={busy} onClick={() => proceedUnsaved(false)}>초안 취소 후 이동</Button><Button disabled={busy || (pageDirty && !validDraft) || (roleDirty && !roleValid)} onClick={() => proceedUnsaved(true)}>저장 후 이동</Button></div></div></div>}
   </div>;
 }
 

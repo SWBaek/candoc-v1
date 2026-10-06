@@ -8,15 +8,17 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createReviewApp } from '../server/app.mjs';
 import { checkSuggestionUI } from './suggestions-browser.mjs';
+import { fixtureJson, fixtureProject } from './local-fixture.mjs';
+import { checkRoleUI, checkActualRoleLayout } from './roles-browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const originalPath = path.join(root, '../working-project/ieee-1547/raw/ieee1547-document.json');
+const originalPath = fixtureJson;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const baseline = hash(await readFile(originalPath));
 const temp = await mkdtemp(path.join(tmpdir(), 'candoc-ui-browser-'));
 const dbPath = path.join(temp, 'review.sqlite');
 await mkdir(path.join(root, 'qa'), { recursive: true });
-let app = createReviewApp({ dbPath });
+let app = createReviewApp({ projectDir: fixtureProject, dbPath });
 await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
 const port = app.server.address().port;
 const url = `http://127.0.0.1:${port}`;
@@ -163,25 +165,25 @@ try {
   await expect(decision.getByText('원본 4페이지', { exact: true })).toBeVisible();
   assert.equal((await state()).decisions.find(item => item.page === 3).note, '저장 후 이동 동작 확인');
 
-  await stageButton(3).click();
+  await stageButton(4).click();
   await page.locator('#stage-note').fill('브라우저 테스트: 영역과 역할 확인의 수동 검토 근거');
   await page.getByRole('button', { name: '수동 검토 완료 기록', exact: true }).click();
-  await expect(stageButton(3)).toHaveClass(/step-completed/);
+  await expect(stageButton(4)).toHaveClass(/step-completed/);
   await stageButton(5).click();
   await expect(stageButton(5)).toHaveClass(/step-current/);
   await expect(stageButton(5)).not.toHaveClass(/step-completed/);
   await page.reload();
   await expect(stageButton(5)).toHaveClass(/step-current/);
-  await expect(stageButton(3)).toHaveClass(/step-completed/);
+  await expect(stageButton(4)).toHaveClass(/step-completed/);
 
   await page.goto('about:blank');
   await app.close();
-  app = createReviewApp({ dbPath });
+  app = createReviewApp({ projectDir: fixtureProject, dbPath });
   await new Promise(resolve => app.server.listen(port, '127.0.0.1', resolve));
   await page.goto(url);
   await expect(stageButton(5)).toHaveClass(/step-current/);
-  await expect(stageButton(3)).toHaveClass(/step-completed/);
-  await stageButton(3).click();
+  await expect(stageButton(4)).toHaveClass(/step-completed/);
+  await stageButton(4).click();
   await expect(page.locator('#stage-note')).toHaveValue('브라우저 테스트: 영역과 역할 확인의 수동 검토 근거');
   await stageButton(2).click();
   await tile(1, '제외').click();
@@ -323,7 +325,7 @@ try {
   await expect(page.locator('.exclusion-stamp')).toHaveCount(4);
   await page.goto('about:blank');
   await app.close();
-  app = createReviewApp({ dbPath });
+  app = createReviewApp({ projectDir: fixtureProject, dbPath });
   await new Promise(resolve => app.server.listen(port, '127.0.0.1', resolve));
   await page.goto(url);
   await expect(stageButton(2)).toHaveClass(/step-completed/);
@@ -422,6 +424,8 @@ try {
     assert.equal(existsSync(path.join(temp, 'invalid-review.sqlite')), false);
   } finally { await invalidPage.close(); await invalidApp.close(); }
   await checkSuggestionUI(browser);
+  await checkRoleUI(browser);
+  await checkActualRoleLayout(browser);
   assert.deepEqual(errors, []);
   assert.equal(hash(await readFile(originalPath)), baseline);
   console.log('Browser checks passed: document info without completion or notes, 11 review steps, schema/converter versions distinguished, unverified version and missing-image guidance, document-info mobile/dark layouts, unusable input error screen without DB writes, readable text contrast, shared control sizes, collapsed mobile process, keep remaining pages and finish, exclusion stamps/restoration, pending gate, reload/restart persistence, independent toggles, additive Shift range, all 138 pages, 40-page bulk decisions, filtering, zoom, drafts, source image/text, hidden panel, double-click, 1512/1024/375/320px, theme persistence. Test DB was isolated from project review records.');

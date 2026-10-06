@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createReviewApp } from '../server/app.mjs';
+import { fixtureProject } from './local-fixture.mjs';
 
 export async function checkSuggestionUI(browser) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -20,7 +21,7 @@ export async function checkSuggestionUI(browser) {
     if (mode === 'long') return [{ pages: [1], reason: '발행 안내.'.repeat(60) }, { pages: [13, 14, 15], reason: '목차' }];
     return new Promise((resolve, reject) => { resolveRun = resolve; signal.addEventListener('abort', () => reject(new Error('취소')), { once: true }); });
   };
-  let app = createReviewApp({ dbPath, suggestionRunner: runner });
+  let app = createReviewApp({ projectDir: fixtureProject, dbPath, suggestionRunner: runner });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   const port = app.server.address().port, url = `http://127.0.0.1:${port}`;
   const page = await browser.newPage({ viewport: { width: 1512, height: 982 } });
@@ -131,7 +132,7 @@ export async function checkSuggestionUI(browser) {
     assert.equal(await page.evaluate(() => document.body.style.overflow), '');
     await openPanel();
     const persisted = await state();
-    await app.close(); app = createReviewApp({ dbPath, suggestionRunner: runner });
+    await app.close(); app = createReviewApp({ projectDir: fixtureProject, dbPath, suggestionRunner: runner });
     await new Promise(resolve => app.server.listen(port, '127.0.0.1', resolve));
     await page.reload(); await expect(request).toBeEnabled();
     await expect(page.locator('.ai-page-hint')).toHaveCount(0);

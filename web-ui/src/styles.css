@@ -135,6 +135,40 @@ h1 { font-size: var(--font-title); line-height: 1.35; font-weight: var(--weight-
 .ai-welcome > p:not(.ai-suggestion-error) { color: var(--muted); }
 .ai-panel-backdrop { display: none; }
 .ai-page-hint { display: block; color: var(--muted); font-size: var(--font-caption); margin-top: var(--space-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-review { min-width: 0; }
+.role-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
+.role-toolbar > span, .role-scope-note { color: var(--muted); font-size: var(--font-label); }
+.role-toolbar label { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; flex: 1; }
+.role-toolbar select { width: 100%; }
+.role-scope-note { margin-bottom: var(--space-3); }
+.role-group-picker { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--font-label); margin-bottom: var(--space-4); }
+.role-group-picker select { width: 100%; }
+.role-group-summary { border-bottom: var(--stroke) solid var(--border); padding-bottom: var(--space-3); margin-bottom: var(--space-4); font-size: var(--font-label); }
+.role-group-summary p { color: var(--muted); overflow-wrap: anywhere; }
+.role-group-summary details { margin-top: var(--space-2); }
+.role-workbench { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--space-6); align-items: start; }
+.role-source, .role-editor { min-width: 0; }
+.role-source > label { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); font-size: var(--font-label); }
+.role-source > label select { width: 100%; }
+.role-image-wrap { position: relative; max-width: 520px; margin: 0 auto var(--space-3); }
+.role-page-image { display: block; width: 100%; height: auto; border: var(--stroke) solid var(--border); background: #fff; }
+.role-bbox { position: absolute; border: var(--stroke-selected) solid var(--primary); background: color-mix(in srgb, var(--current) 18%, transparent); pointer-events: none; box-sizing: border-box; }
+.role-original { margin-top: var(--space-4); font-size: var(--font-label); overflow-wrap: anywhere; }
+.role-original > p, .role-original details { margin-top: var(--space-2); }
+.role-original > p { color: var(--muted); }
+.role-original pre { overflow: auto; max-height: 260px; background: var(--soft); padding: var(--space-3); font-size: var(--font-caption); }
+.role-original-text { white-space: pre-wrap; max-height: 280px; overflow: auto; margin: var(--space-2) 0; }
+.role-editor { padding: var(--space-4); border: var(--stroke) solid var(--border); border-radius: var(--radius-panel); background: var(--background); }
+.role-editor h2, .role-members h2, .role-completion h2 { font-size: var(--font-body); font-weight: var(--weight-semibold); }
+.role-editor select { width: 100%; }
+.role-members, .role-completion { border-top: var(--stroke) solid var(--border); margin-top: var(--space-6); padding-top: var(--space-4); }
+.role-member { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-3) 0; border-bottom: var(--stroke) solid var(--border); font-size: var(--font-label); }
+.role-member > label { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; cursor: pointer; overflow-wrap: anywhere; }
+.role-member input { width: var(--icon-md); height: var(--icon-md); flex-shrink: 0; accent-color: var(--primary); }
+.role-member small { display: block; font-size: var(--font-caption); color: var(--muted); margin-top: var(--space-1); }
+.role-member > span, .role-completion > p, .role-no-image { color: var(--muted); font-size: var(--font-label); }
+@media (max-width: 1220px) { .role-workbench { grid-template-columns: minmax(0, 1fr); } }
+@media (pointer: coarse) { .role-member > label { min-height: var(--control-touch); } .role-member input { width: var(--control-touch); height: var(--control-touch); } }
 .display-bar { position: fixed; bottom: 0; left: var(--sidebar-width); right: 0; z-index: 4; display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; border-top: var(--stroke) solid var(--border); padding: var(--space-3) var(--space-8); background: var(--background); }
 .main:has(.display-bar) { padding-bottom: 96px; }
 .display-zoom { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }

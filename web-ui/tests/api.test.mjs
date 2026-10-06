@@ -7,9 +7,10 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createReviewApp } from '../server/app.mjs';
 import { DatabaseSync } from 'node:sqlite';
+import { fixtureJson } from './local-fixture.mjs';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const originalPath = path.join(workspace, 'working-project/ieee-1547/raw/ieee1547-document.json');
+const originalPath = fixtureJson;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 test('document information is outside review completion and legacy records survive', async t => {
@@ -32,6 +33,7 @@ test('document information is outside review completion and legacy records survi
   for (const id of [0, 1]) assert.equal((await h.call(`/api/review/stages/${id}`, { revision: state.revision, action: 'complete', note: '정보 화면 완료 시도' })).status, 400);
   state = (await h.call('/api/review/navigation', { revision: state.revision, stage: 0, selectedPage: state.selectedPage, filter: 'all' })).data;
   assert.equal(state.activeStage, 0);
+  state = (await h.call('/api/review/roles', { revision: state.revision, ref: '#/texts/0', status: 'normal', region: 'body', role: 'body', parentRef: '', reason: '두 번째 페이지의 본문 영역과 원본 소속을 확인함', evidence: 'json', followUp: '' })).data;
   for (let id = 3; id < 12; id++) {
     const result = await h.call(`/api/review/stages/${id}`, { revision: state.revision, action: 'complete', note: '수동 검토 범위와 근거' });
     assert.equal(result.status, 200); state = result.data;

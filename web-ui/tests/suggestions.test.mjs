@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createReviewApp } from '../server/app.mjs';
+import { fixtureJson } from './local-fixture.mjs';
 import { extractPageInput, runCodexSuggestions, validateSuggestions } from '../server/codex-suggestions.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -12,7 +13,7 @@ const launch = mode => ({ executable: process.execPath, args: [path.join(root, '
 const pages = [1, 2, 3].map(page => ({ page, items: [{ ref: '#/texts/0', label: 'text', text: 'page content' }] }));
 
 test('page payload includes actual document-index cells and every original page without modifying JSON', async () => {
-  const bytes = await readFile(path.join(root, '../working-project/ieee-1547/raw/ieee1547-document.json'));
+  const bytes = await readFile(fixtureJson);
   const doc = JSON.parse(bytes);
   const before = JSON.stringify(doc);
   const input = extractPageInput(doc);
