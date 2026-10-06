@@ -26,6 +26,8 @@ export async function checkHeadingUI(browser) {
     await page.goto(url); await page.locator('[data-stage-id="5"]').click(); await expect(page.getByRole('tree')).toHaveCount(1); await expect(page.getByRole('treeitem')).toHaveCount(5);
     await expect(row('#/texts/4')).toContainText('3단계 반복요소'); await expect(page.getByRole('button', { name: '제목·개요 완료 기록', exact: true })).toBeDisabled();
     const initial = await state(); await row('#/texts/1').focus(); await page.keyboard.press('Tab'); await expect(page.getByLabel('제안 상위 제목', { exact: true })).toHaveValue('#/texts/0'); await expect(row('#/texts/1')).toHaveAttribute('aria-level', '2'); await expect(row('#/texts/2')).toHaveAttribute('aria-level', '3');
+    await page.locator('.heading-scope summary').click();
+    await expect(page.locator('.heading-scope')).not.toContainText('#/texts/5');
     assert.deepEqual((await state()).headingReviews, initial.headingReviews, 'Tab modifies the draft only');
     await page.keyboard.press('Shift+Tab'); await expect(row('#/texts/1')).toHaveAttribute('aria-level', '1'); await expect(row('#/texts/2')).toHaveAttribute('aria-level', '2');
     await page.getByRole('button', { name: '초안 실행취소', exact: true }).click(); await expect(row('#/texts/2')).toHaveAttribute('aria-level', '3'); await page.getByRole('button', { name: '전체 초안 취소', exact: true }).click(); await expect(row('#/texts/2')).toHaveAttribute('aria-level', '2');
@@ -35,6 +37,13 @@ export async function checkHeadingUI(browser) {
     await page.getByLabel('제목 트리 검색', { exact: true }).focus(); await page.keyboard.press('Tab'); await expect(page.getByRole('button', { name: '검색 해제·전체 펼치기', exact: true })).toBeFocused(); assert.deepEqual((await state()).headingReviews, initial.headingReviews);
     await page.getByRole('button', { name: '검색 해제·전체 펼치기', exact: true }).click(); await row('#/texts/0').click(); await page.getByText('선택 원문·bbox·JSON 대조', { exact: true }).click(); await expect(page.locator('.heading-source img')).toHaveAttribute('src', '/api/pages/1/image'); await expect(page.locator('.heading-source pre')).toContainText('charspan'); await expect(page.locator('.heading-source .reading-box')).toHaveCount(1);
     await page.getByRole('button', { name: '선택 원본 확대', exact: true }).click(); await expect(page.getByRole('dialog').getByRole('img')).toHaveAttribute('src', '/api/pages/1/image'); await page.keyboard.press('Escape');
+    await page.getByLabel('#/texts/5 제목 선택', { exact: true }).check();
+    await expect(page.getByLabel('제목 원본 출처 페이지', { exact: true })).toHaveValue('2');
+    await expect(page.locator('.heading-source img')).toHaveAttribute('src', '/api/pages/2/image');
+    await expect(page.locator('.heading-source .reading-box')).toHaveCount(1);
+    await page.getByLabel('#/texts/2 제목 선택', { exact: true }).check();
+    await expect(page.locator('.heading-source img')).toHaveAttribute('src', '/api/pages/1/image');
+    await expect(page.locator('.heading-source .reading-box')).toHaveCount(1);
     await page.getByRole('button', { name: '보이는 항목 선택', exact: true }).click(); await page.getByText(/실제 대상 5개 · 예외 선택/).click(); await page.getByLabel('#/texts/4 일괄 대상', { exact: true }).uncheck(); await expect(page.locator('.heading-selection')).toContainText('예외 1개');
     await page.getByLabel('일괄 제목 판단', { exact: true }).selectOption('unjudgeable'); await page.getByLabel('일괄 제목 사유', { exact: true }).fill('선택 제목의 계층과 표현을 원문에 추가 대조'); await page.getByLabel('일괄 제목 후속 확인', { exact: true }).fill('원본 PDF의 전체 제목 계층 확인');
     await page.getByRole('button', { name: '선택 판단 4개 초안 적용', exact: true }).click(); assert.deepEqual((await state()).headingReviews, initial.headingReviews);

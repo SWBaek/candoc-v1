@@ -16,3 +16,10 @@ test('search retains ancestors; collapsed hidden selections can be identified wi
   assert.deepEqual(visibleTree(values, text, '', new Set(['B'])).map(({ row }) => row.ref), ['A', 'B', 'D']);
   const searched = visibleTree(values, text, 'find', new Set(['B'])); assert.deepEqual(searched.map(({ row }) => row.ref), ['B', 'C']); assert.equal(searched[0].context, true); assert.equal(searched[1].context, false); assert.deepEqual(values, rows());
 });
+
+test('indent preserves unrelated gapped positions and stale judgment metadata', () => {
+  const initial = rows(); initial[3] = { ...initial[3], position: 5, needsReview: true, status: 'normal', updatedAt: 'original' };
+  const next = indentTree(initial, 'B', false);
+  assert.deepEqual(next.find(row => row.ref === 'D'), initial[3]);
+  assert.deepEqual(next.filter(row => JSON.stringify(row) !== JSON.stringify(initial.find(old => old.ref === row.ref))).map(row => row.ref), ['B', 'C']);
+});

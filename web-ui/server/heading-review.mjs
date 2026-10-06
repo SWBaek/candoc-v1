@@ -126,7 +126,7 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
     const sanitized = body.items.map(row => {
       const item = c.allTexts.find(item => item.ref === row?.ref); if (!item) fail(400, '현재 유지 범위의 원본 텍스트를 선택하세요.');
       const payload = common(row, item.pages);
-      if (![true, false, null].includes(row.isHeading) || typeof row.parentRef !== 'string' || typeof row.sectionNumber !== 'string' || row.sectionNumber.length > 100 || !Number.isInteger(row.position) || row.position < 0 || row.position > texts.length * 100) fail(400, '제목 여부·위치·절 번호·부모를 명시하세요.');
+      if (![true, false, null].includes(row.isHeading) || typeof row.parentRef !== 'string' || typeof row.sectionNumber !== 'string' || row.sectionNumber.length > 100 || !Number.isFinite(row.position) || row.position < 0 || row.position > texts.length * 100) fail(400, '제목 여부·위치·절 번호·부모를 명시하세요.');
       if (row.isHeading === true && (!Number.isInteger(row.level) || row.level < 1 || row.level > 9 || !documentParts.filter(part => !['mixed', 'unknown'].includes(part)).includes(row.part))) fail(400, '제목의 수준 1~9와 문서 구분을 선택하세요.');
       if (row.isHeading !== true && (row.level !== null || row.parentRef || row.sectionNumber || row.part)) fail(400, '비제목/미확정 항목에 제목 구조를 남길 수 없습니다.');
       if (['normal', 'error'].includes(row.status) && row.isHeading === null) fail(400, '제목 여부를 먼저 판단하세요.');

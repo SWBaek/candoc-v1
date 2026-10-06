@@ -1,4 +1,5 @@
 import type { HeadingDraft } from './types';
+import { validateHeadingForest } from '../server/heading-tree.mjs';
 export function descendants(ref: string, rows: HeadingDraft[]) {
   const result = new Set<string>([ref]); let added = true;
   while (added) { added = false; for (const row of rows) if (row.isHeading && result.has(row.parentRef) && !result.has(row.ref)) { result.add(row.ref); added = true; } }
@@ -25,7 +26,18 @@ export function changeHierarchy(rows: HeadingDraft[], ref: string, parentRef: st
   if (parentRef) { const family = descendants(parentRef, rest); insertion = Math.max(...rest.map((row, index) => family.has(row.ref) ? index : -1)) + 1; }
   else if (node.parentRef) { const family = descendants(node.parentRef, rest); insertion = Math.max(...rest.map((row, index) => family.has(row.ref) ? index : -1)) + 1; }
   rest.splice(insertion, 0, ...block);
-  return rest.map((row, index) => ({ ...row, ...(row.isHeading ? { position: index } : {}), ...(subtree.has(row.ref) ? { level: row.level! + delta, parentRef: row.ref === ref ? parentRef : row.parentRef, part: parentRef ? parent!.part : row.part } : {}) }));
+  // Preserve gaps and unrelated positions. Only a moved subtree receives new
+  // positions when its relative order changes.
+  const positions = new Map<string, number>();
+  if (ordered.filter(row => row.isHeading).map(row => row.ref).join('|') !== rest.filter(row => row.isHeading).map(row => row.ref).join('|')) {
+    const first = rest.findIndex(row => subtree.has(row.ref));
+    const preceding = rest.slice(0, first).filter(row => row.isHeading).at(-1)?.position ?? -1;
+    const following = rest.slice(first + block.length).find(row => row.isHeading)?.position ?? preceding + block.length + 1;
+    block.forEach((row, index) => positions.set(row.ref, preceding + (following - preceding) * (index + 1) / (block.length + 1)));
+  }
+  const result = rest.map(row => subtree.has(row.ref) ? { ...row, position: positions.get(row.ref) ?? row.position, level: row.level! + delta, parentRef: row.ref === ref ? parentRef : row.parentRef, part: parentRef ? parent!.part : row.part } : row);
+  validateHeadingForest(result, (_, message) => { throw Error(message); });
+  return result;
 }
 export function indentTree(rows: HeadingDraft[], ref: string, outward: boolean) {
   const node = rows.find(row => row.ref === ref); if (!node?.isHeading) throw Error('제목 여부를 먼저 판단하세요.');
