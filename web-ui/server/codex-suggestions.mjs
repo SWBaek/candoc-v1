@@ -61,9 +61,9 @@ function promptFor(pages) {
 }
 
 // Each run owns its process and ephemeral thread; nothing is written to the review DB.
-export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutMs: overrideTimeout } = {}) {
-  const prompt = promptFor(pages);
-  if (Buffer.byteLength(prompt, 'utf8') > 1024 * 1024) throw new Error('문서의 추천 입력이 1 MiB를 넘습니다. 현재 버전에서는 전체 입력을 처리할 수 없습니다.');
+export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutMs: overrideTimeout, selectedModel, selectedEffort, catalogue = false, taskPrompt, taskSchema, taskInstructions, validateOutput, maxInputBytes = 1024 * 1024 } = {}) {
+  const prompt = taskPrompt ?? (catalogue ? '' : promptFor(pages));
+  if (Buffer.byteLength(prompt, 'utf8') > maxInputBytes) throw new Error(`문서의 추천 입력이 ${maxInputBytes / 1024 / 1024} MiB를 넘습니다. 현재 연결의 입력 한도를 초과했습니다.`);
   const timeoutMs = Number(overrideTimeout ?? process.env.CANDOC_CODEX_TIMEOUT_MS ?? 240000);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) throw new Error('CANDOC_CODEX_TIMEOUT_MS는 1,000~600,000 사이의 정수여야 합니다.');
   if (signal?.aborted) throw new Error('추천을 취소했습니다.');
@@ -126,21 +126,23 @@ export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutM
     const models = [];
     let cursor;
     do { const result = await request('model/list', { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) }); models.push(...result.data); cursor = result.nextCursor; } while (cursor);
-    const configuredModel = process.env.CANDOC_CODEX_MODEL;
+    if (catalogue) { turnSettled = true; return models.map(item => ({ model: item.model, displayName: item.displayName ?? item.model, isDefault: !!item.isDefault, efforts: (item.supportedReasoningEfforts ?? []).map(e => e.reasoningEffort), defaultEffort: item.defaultReasoningEffort })); }
+    const configuredModel = selectedModel ?? process.env.CANDOC_CODEX_MODEL;
     const model = configuredModel ? models.find(item => item.model === configuredModel) : models.find(item => item.isDefault) ?? models[0];
     if (!model) throw new Error('사용할 수 있는 Codex 모델이 없습니다. 로그인 상태와 CANDOC_CODEX_MODEL을 확인하세요.');
+    if (selectedEffort && !model.supportedReasoningEfforts?.some(item => item.reasoningEffort === selectedEffort)) throw new Error('선택한 모델이 지원하지 않는 Reasoning effort입니다.');
     const settings = await request('config/read', { includeLayers: false });
     const config = { 'features.apps': false, 'features.plugins': false, 'features.multi_agent': false };
     for (const name of Object.keys(settings.config?.mcp_servers ?? {})) config[`mcp_servers.${name}.enabled`] = false;
-    const thread = await request('thread/start', { cwd, model: model.model, sandbox: 'read-only', approvalPolicy: 'never', ephemeral: true, config, developerInstructions: instructions });
+    const thread = await request('thread/start', { cwd, model: model.model, sandbox: 'read-only', approvalPolicy: 'never', ephemeral: true, config, developerInstructions: taskInstructions ?? instructions });
     threadId = thread.thread.id;
-    const effort = model.supportedReasoningEfforts?.some(item => item.reasoningEffort === 'low') ? 'low' : model.defaultReasoningEffort;
-    const turn = await request('turn/start', { threadId, input: [{ type: 'text', text: prompt }], outputSchema: suggestionSchema, ...(effort ? { effort } : {}) });
+    const effort = selectedEffort ?? (model.supportedReasoningEfforts?.some(item => item.reasoningEffort === 'low') ? 'low' : model.defaultReasoningEffort);
+    const turn = await request('turn/start', { threadId, input: [{ type: 'text', text: prompt }], outputSchema: taskSchema ?? suggestionSchema, ...(effort ? { effort } : {}) });
     turnId ??= turn.turn.id;
     const text = await finished;
     let result;
     try { result = JSON.parse(text); } catch { throw new Error('Codex의 최종 답변이 JSON 형식이 아닙니다. 다시 추천을 요청하세요.'); }
-    return validateSuggestions(result, pages.map(page => page.page));
+    return validateOutput ? validateOutput(result) : validateSuggestions(result, pages.map(page => page.page));
   } finally {
     clearTimeout(timer); signal?.removeEventListener('abort', interrupt); lines.close();
     child.stdin.end();

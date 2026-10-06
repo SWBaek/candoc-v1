@@ -7,13 +7,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { createReviewApp } from '../server/app.mjs';
 import { headingDocument, pixelPng, judgment, headingPayload, nonHeading } from './fixtures/heading-document.mjs';
 import { seedReading } from './fixtures/reading-document.mjs';
+import { runHeadingSuggestions, listHeadingModels, validateHeadingSuggestions } from '../server/heading-suggestions.mjs';
 import { validateHeadingForest } from '../server/heading-tree.mjs';
 
-async function harness(t, document = headingDocument()) {
+async function harness(t, document = headingDocument(), options = {}) {
   const directory = await mkdtemp(path.join(tmpdir(), 'candoc-headings-')), dbPath = path.join(directory, 'inspection/review.sqlite'), jsonPath = path.join(directory, 'raw/ieee1547-document.json'), bytes = JSON.stringify(document);
   await mkdir(path.join(directory, 'raw/artifacts'), { recursive: true }); await writeFile(jsonPath, bytes); await writeFile(path.join(directory, 'raw/artifacts/page.png'), pixelPng);
   let app, url;
-  async function start() { app = createReviewApp({ projectDir: directory, dbPath }); await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve)); url = `http://127.0.0.1:${app.server.address().port}`; }
+  async function start() { app = createReviewApp({ projectDir: directory, dbPath, ...options }); await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve)); url = `http://127.0.0.1:${app.server.address().port}`; }
   await start();
   const call = async (endpoint, body) => { const response = await fetch(url + endpoint, body ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined); return { status: response.status, data: await response.json() }; };
   const state = async () => (await call('/api/review')).data, context = async () => (await call('/api/heading-review')).data;
@@ -22,11 +23,12 @@ async function harness(t, document = headingDocument()) {
   const reading = async () => seedReading(put, (await call('/api/reading-review')).data);
   const ready = async () => { await put('/api/review/stages/2', { action: 'complete', includeUnreviewed: true, note: '' }); for (const item of (await context()).allTexts) { const role = item.ref === '#/texts/4' ? 'header' : item.ref === '#/texts/3' ? 'body' : 'title'; assert.equal((await put('/api/review/roles', { ref: item.ref, ...judgment, role, region: role === 'header' ? 'header' : 'body', parentRef: '#/body' })).status, 200); } await reading(); };
   t.after(async () => { await app.close(); assert.equal(await readFile(jsonPath, 'utf8'), bytes); assert.equal(path.dirname(directory), path.resolve(tmpdir())); assert.ok(path.basename(directory).startsWith('candoc-headings-')); await rm(directory, { recursive: true, force: true }); });
-  return { call, state, context, put, save, ready, reading, dbPath, restart: async () => { await app.close(); await start(); } };
+  const request = async (endpoint, method, body) => { const response = await fetch(url + endpoint, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return { status: response.status, data: await response.json() }; };
+  return { request, call, state, context, put, save, ready, reading, dbPath, restart: async () => { await app.close(); await start(); } };
 }
 const pageCheck = (page, part = 'body') => ({ page, ...judgment, part, checkedAllText: true, issues: [] });
 test('candidates are evidence, running headers distinguished, all provenance preserved and candidate-outside path retained', async t => {
-  const h = await harness(t), before = await h.state(), c = await h.context(); assert.deepEqual(await h.state(), before); assert.equal(c.allTexts.length, 6); assert.equal(c.candidates.length, 5); assert.equal(c.allTexts.find(i => i.ref === '#/texts/3').candidate, false);
+  const h = await harness(t), before = await h.state(), c = await h.context(); assert.deepEqual(await h.state(), before); assert.equal(c.allTexts.length, 6); assert.equal(c.candidates.length, 4); assert.equal(c.allTexts.find(i => i.ref === '#/texts/3').candidate, false);
   assert.deepEqual(c.allTexts[5].provenance.map(({ rect, page, ...entry }) => entry), headingDocument().texts[5].prov); await h.ready(); assert.equal((await h.context()).allTexts.find(i => i.ref === '#/texts/4').running, true);
   assert.equal((await h.save([nonHeading((await h.context()).allTexts.find(i => i.ref === '#/texts/3'))])).status, 200); assert.ok((await h.context()).candidates.some(i => i.ref === '#/texts/3'));
 });
@@ -97,4 +99,55 @@ test('atomic mid-write failure, stale revisions, saved restore/restart and exclu
   await h.reading(); await h.save(items); await h.put('/api/review/pages/2', { status: 'excluded', reason: '합성 중간 페이지 제외', note: '', evidence: 'json' });
   const mixed = (await h.context()).allTexts.find(item => item.ref === '#/texts/5'); assert.deepEqual(mixed.pages, [2, 3]); assert.equal(mixed.provenance.length, 2); assert.equal(mixed.readingOccurrences.length, 1); assert.ok((await h.state()).headingReviews.find(r => r.ref === mixed.ref).needsReview);
   await h.put('/api/review/pages/2', { status: 'included', reason: '범위 복원', note: '', evidence: 'json' }); assert.equal((await h.context()).allTexts.find(i => i.ref === mixed.ref).readingOccurrences.length, 2); assert.equal((await h.put('/api/review/stages/12', { action: 'complete', note: '미확인 결과 완료 시도' })).status, 400);
+});
+
+
+test('short addresses do not become candidates; classified outline and numbered missing candidates are distinct', async t => {
+  const document = headingDocument(), address = structuredClone(document.texts[3]); address.self_ref = '#/texts/6'; address.text = address.orig = '123 Main Street'; document.texts.push(address); document.body.children.push({ $ref: address.self_ref });
+  const h = await harness(t, document), c = await h.context();
+  assert.equal(c.allTexts.filter(row => row.classifiedHeading).length, 3);
+  assert.equal(c.allTexts.find(row => row.ref === '#/texts/2').missingCandidate, true);
+  assert.equal(c.allTexts.find(row => row.ref === '#/texts/4').candidate, false); assert.equal(c.allTexts.find(row => row.ref === '#/texts/6').candidate, false);
+  assert.equal((await h.state()).headingReviews.length, 0);
+  // A single bare number is insufficient: matching numbering family required.
+});
+
+test('structural-only transaction preserves independent stale Annex and requires explicit review confirmation', async t => {
+  const h = await harness(t); await h.ready(); const c = await h.context();
+  await h.save(c.candidates.map(item => headingPayload(item, item.ref === '#/texts/2' ? { level: 2, parentRef: '#/texts/1' } : {})));
+  let state = await h.state(), annex = state.headingReviews.find(row => row.ref === '#/texts/5');
+  const metadata = await h.save([{ ...annex, reason: '독립 근거 보완' }]); await h.put('/api/review/headings', { action: 'restore', id: metadata.data.headingUndo.id });
+  state = await h.state(); annex = state.headingReviews.find(row => row.ref === '#/texts/5'); assert.equal(annex.needsReview, true);
+  const b = state.headingReviews.find(row => row.ref === '#/texts/1'), child = state.headingReviews.find(row => row.ref === '#/texts/2');
+  const saved = await h.save([{ ...b, level: 2, parentRef: '#/texts/0' }, { ...child, level: 3 }], [], { confirmedRefs: [] }); assert.equal(saved.status, 200);
+  assert.deepEqual(saved.data.headingReviews.find(row => row.ref === annex.ref), annex);
+  assert.equal(saved.data.headingReviews.find(row => row.ref === b.ref).needsReview, true);
+  await h.restart(); assert.deepEqual((await h.state()).headingReviews, saved.data.headingReviews);
+  assert.equal((await h.save([b], [], { confirmedRefs: ['unknown'] })).status, 400);
+});
+
+test('Codex model/effort catalogue and heading structured final output use existing isolated stdio protocol', async t => {
+  const h = await harness(t); await h.ready(); const context = await h.context(), before = await h.state();
+  const launch = { executable: process.execPath, args: [path.resolve('tests/fixtures/fake-app-server.mjs'), 'heading'] };
+  const models = await listHeadingModels({ cwd: process.cwd(), launch }); assert.deepEqual(models[0].efforts, ['low', 'medium']);
+  const suggestions = await runHeadingSuggestions({ context, cwd: process.cwd(), model: 'test-model', effort: 'medium', launch });
+  assert.equal(suggestions[0].changes.length, 2); assert.equal(suggestions[0].changes[0].after.parentRef, '#/texts/0');
+  await assert.rejects(runHeadingSuggestions({ context, cwd: process.cwd(), model: 'absent', effort: 'medium', launch }), /모델/);
+  await assert.rejects(runHeadingSuggestions({ context, cwd: process.cwd(), model: 'test-model', effort: 'unsupported', launch }), /effort/);
+  assert.throws(() => validateHeadingSuggestions({ suggestions: [{ reason: 'bad', changes: [{ ref: '#/texts/999', isHeading: true, level: 1, parentRef: '', sectionNumber: '' }] }] }, context), /참조/);
+  assert.deepEqual(await h.state(), before);
+});
+
+test('recommendation preview checks version, refs and exception subtree atomically and never records approval as review', async t => {
+  const h = await harness(t, headingDocument(), { headingSuggestionRunner: async ({ context }) => validateHeadingSuggestions({ suggestions: [{ reason: 'synthetic recommendation', changes: [{ ref: '#/texts/1', isHeading: true, level: 2, parentRef: '#/texts/0', sectionNumber: '2' }, { ref: '#/texts/2', isHeading: true, level: 3, parentRef: '#/texts/1', sectionNumber: '3' }] }] }, context) });
+  const before = await h.state();
+  // HTTP helper exposes POST separately; recommendation uses no review mutation.
+  const started = await h.request('/api/review/heading-suggestions', 'POST', { revision: before.revision, model: 'test-model', effort: 'medium' }); assert.equal(started.status, 202);
+  let job; for (let i = 0; i < 30; i++) { job = (await h.call('/api/review/heading-suggestions')).data; if (job.status !== 'running') break; await new Promise(resolve => setTimeout(resolve, 10)); }
+  assert.equal(job.status, 'completed', job.error);
+  const preview = body => h.request('/api/review/heading-suggestions/preview', 'POST', { id: job.id, groupId: '0', revision: before.revision, exceptions: [], ...body });
+  assert.equal((await preview({})).status, 200); assert.deepEqual(await h.state(), before);
+  assert.equal((await preview({ exceptions: ['#/texts/1'] })).status, 400); // invalid partial subtree is rejected
+  assert.deepEqual(await h.state(), before);
+  await h.put('/api/review/stages/5', { action: 'save_note', note: 'version change' }); assert.equal((await preview({})).status, 409);
 });

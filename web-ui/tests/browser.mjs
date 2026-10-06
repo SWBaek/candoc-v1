@@ -11,6 +11,7 @@ import { checkSuggestionUI } from './suggestions-browser.mjs';
 import { fixtureJson, fixtureProject } from './local-fixture.mjs';
 import { checkRoleUI, checkActualRoleLayout } from './roles-browser.mjs';
 import { checkReadingUI, checkActualReadingLayout } from './reading-browser.mjs';
+import { checkHeadingImprovementsUI } from './heading-improvements-browser.mjs';
 import { checkHeadingUI, checkActualHeadingLayout } from './headings-browser.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -433,7 +434,7 @@ try {
   await checkActualRoleLayout(browser);
   await checkReadingUI(browser);
   await checkActualReadingLayout(browser);
-  await checkHeadingUI(browser);
+  await checkHeadingUI(browser); await checkHeadingImprovementsUI(browser);
   await checkActualHeadingLayout(browser);
   assert.deepEqual(errors, []);
   assert.equal(hash(await readFile(originalPath)), baseline);

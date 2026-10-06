@@ -1,16 +1,16 @@
-# 5단계 제목과 문서 개요 계약 v0.1
+# 5단계 제목과 문서 개요 계약 v0.2
 
 작성일: 2026-10-06
 
 ## 범위와 원본
 
-제목 여부·제안 계층·절 번호·문서 구분과 전체 유지 페이지의 개요 검수 기록을 저장한다. 기록은 교정 사본 적용이 아니다. 입력 DoclingDocument, 원본 부모/소속, orig/text, ref, 원본 페이지 번호, PNG, bbox와 모든 prov(charspan 포함)를 보존한다. 누락 원문을 추정하지 않는다. 교정 사본 출력과 공식 Docling 스키마/HTML 검증, 6단계 전용 기능, 모델 호출은 이 구현의 범위 밖이다.
+제목 여부·제안 계층·절 번호·문서 구분과 전체 유지 페이지의 개요 검수 기록을 저장한다. 기록은 교정 사본 적용이 아니다. 입력 DoclingDocument, 원본 부모/소속, orig/text, ref, 원본 페이지 번호, PNG, bbox와 모든 prov(charspan 포함)를 보존한다. 누락 원문을 추정하지 않는다. 교정 사본 출력과 공식 Docling 스키마/HTML 검증, 6단계 전용 기능은 범위 밖이다. 로컬 에이전트 추천은 아래 별도 계약을 따른다. 이번 개발 검증에서 실제 모델 추론은 수행하지 않았다.
 
-원본 title/section_header, 3단계 잠정 title, 절 번호 형태와 짧은 텍스트를 후보 근거로 제공한다. 번호 깊이는 증거이며 정답을 강제하지 않는다. 전체 텍스트에서 후보 밖 항목을 수동으로 추가할 수 있다. 확정된 3단계 header/footer/page_number는 반복 요소로 표시하되 원본과 이력을 지우지 않는다. 실제 제목 여부는 명시적 사용자 판단이다.
+원본 title/section_header와 3단계 잠정 title, 저장된 제목을 기본 목차에 투영한다. 기록이 없는 초기 계층은 원본 수준의 상대적인 상하와 읽기 위치로 만든 미검수 표시안이며 원본 parent/level과 구분한다. 부모가 없거나 원본 수준을 건너뛰면 원본 수준과 대조 필요 사유를 표시한다. 초기 투영은 판단·원본 수정·저장이 아니다. 누락 후보는 일반 text의 번호 체계와 실제 근접 제목을 함께 대조한다. 짧은 문구/주소/기관명만으로 후보를 만들지 않는다. 번호 깊이는 증거이며 정답을 강제하지 않는다. 전체 텍스트에서 후보 밖 항목을 수동으로 추가할 수 있다. 확정된 3단계 header/footer/page_number는 반복 요소로 표시하되 원본과 이력을 지우지 않는다. 실제 제목 여부는 명시적 사용자 판단이다.
 
 ## 전체 트리와 순서 근거
 
-기본 화면은 후보와 의심 표시를 함께 제공하는 전체 TOC 트리 하나다. 선택 제목 편집은 한 패널에서 제목 여부를 먼저 판단하고 제안 부모·수준·절 번호·문서 구분을 편집한다. 원본 부모/수준과 제안 계층을 구분한다. PNG+bbox와 원본 JSON은 선택 항목에서 필요할 때 펼친다.
+기본 화면은 현재 제목으로 분류된 전체 TOC 트리 하나다. 의심 제목도 그 위치에 남긴다. 누락 제목 후보/사용자 수동 추가는 별도 보기다. 검색·의심 필터·이전/다음 의심 이동은 상위 맥락을 보존한다. JSON에 존재하는 텍스트의 분류 누락 후보와 JSON 자체의 완전 누락을 구분하며 후자는 JSON만으로 발견했다고 주장하지 않는다. 선택 제목 편집은 한 패널에서 제목 여부를 먼저 판단하고 제안 부모·수준·절 번호·문서 구분을 편집한다. 원본 부모/수준과 제안 계층을 구분한다. PNG+bbox와 원본 JSON은 선택 항목에서 필요할 때 펼친다.
 
 4단계의 저장된 occurrence 순서안을 해당 영역의 원본 슬롯에 반영해 전체 텍스트의 읽기 근거 순서를 구성한다. ref는 첫 occurrence에서 한 번만 제목 행이 되며 여러 페이지 prov는 모두 별도로 보존한다. 제외/유지 페이지가 섞인 요소도 남은 occurrence와 원본 전체 prov를 함께 제공한다. 원본 트리 인덱스와 4단계 표시 인덱스는 별도 필드다. 신규 제목 초안의 위치는 이 표시 순서를 사용한다. 기존 5단계 제안 위치/부모는 자동 덮어쓰지 않고 영향 변경 시 재검토한다.
 
@@ -20,10 +20,10 @@
 
 ## 키보드·선택·초안
 
-- 제목 행 자체에 초점이 있을 때만 Tab/Shift+Tab으로 들여쓰기/내어쓰기를 수행한다. 부모·하위 트리의 수준·표시 순서를 함께 바꾼다. 검색 입력, 행 안 체크박스, 일반 버튼의 Tab은 네이티브 포커스 이동이다.
+- F2/Enter/명시 버튼으로 행 편집 모드를 켜고 제목 행 자체에 초점이 있을 때만 Tab/Shift+Tab으로 들여쓰기/내어쓰기를 수행한다. 부모·하위 트리의 수준·표시 순서를 함께 바꾼다. 편집 모드 밖 및 검색 입력, 행 안 체크박스, 일반 버튼의 Tab은 네이티브 포커스 이동이다.
 - ArrowUp/Down과 Home/End는 행 이동, ArrowRight/Left는 펼침/접기와 자식/부모 이동이다. 초점·선택·편집 대상을 동기화한다.
 - 검색은 일치 항목의 상위 맥락을 보존한다. 검색/접기 후 숨겨진 선택은 수를 알리고 편집을 제한한다. 숨겨진 변경 대상이 남으면 저장도 제한한다. 검색 해제·전체 펼치기로 대상을 다시 확인한다.
-- 일괄 편집은 선택 수, 하위 포함 여부, 실제 대상, 예외와 전체 저장 대상 ref/페이지를 보여준다. 예외의 기존 판단은 보존한다. 수준 일괄 변경은 예외 없는 전체 하위 트리에만 적용하며 부모와 맞지 않는 구조는 저장할 수 없다.
+- 일괄 편집은 선택 수, 하위 포함 여부, 실제 대상, 예외와 전체 저장 대상 ref/페이지를 보여준다. 예외의 기존 판단은 보존한다. 수준 일괄 변경은 예외 없는 전체 하위 트리에만 적용하며 부모와 맞지 않는 구조는 조작 시점에 거부하고 사유를 표시한다. 직접 수준 변경은 유효한 들여쓰기/내어쓰기 경로로 부모/후손도 갱신한다.
 - 탐색·초안 적용은 저장이 아니다. 실행취소(최근 30개 초안), 전체 초안 취소, 저장 값으로 초안 복원, 명시적 저장과 미저장 단계 이동 보호를 제공한다. 같은 판단도 선택 제목 재확인 또는 일괄 적용으로 명시적으로 다시 저장할 수 있다.
 
 ## 문서 구간·누락 확인
@@ -38,9 +38,13 @@
 | --- | --- |
 | GET `/api/heading-review` | sourceHash/ruleHash, candidates/allTexts, pageScopes, diagnoses, 미확정 페이지 |
 | GET `/api/review` | headingReviews/outlinePages, headingCoverage, headingUndo와 기존 2/3/4 기록 |
-| PUT `/api/review/headings` | `revision`, `action: save`, `items`, `pages`; 선택적으로 전체 `range` |
+| PUT `/api/review/headings` | `revision`, `action: save`, `items`, `pages`, `confirmedRefs`; 선택적으로 전체 `range` |
 | PUT `/api/review/headings` | `revision`, `action: restore`, 저장 batch `id` |
 | PUT `/api/review/stages/5` | 기존 메모/명시적 완료/완료 취소 계약 |
+
+구조 편집과 검수 확인을 구분한다. `confirmedRefs`는 items ref의 중복 없는 부분집합이다. UI는 판단/사유/근거 편집과 재확인·일괄 판단으로 지정된 ref만 여기에 넣는다. 나머지 items는 구조 저장이며 needsReview=1을 유지하고 빈 판단에는 의심/구조 확인 사유·후속 확인을 기록한다. 기존 클라이언트 호환을 위해 confirmedRefs 생략은 기존의 전체 items 명시 확인 계약이다. 구조 초안의 부모가 재검토 중이어도 실제 구조는 검증하며, 정상 검수 확인의 부모 freshness gate와 구분한다.
+
+위치(position)는 유한한 0 이상의 수이며 소수 간격도 허용한다. 상대 순서가 그대로면 위치를 보존하고 순서 이동은 이동한 하위 트리에만 사이 위치를 할당한다. 무관한 행의 payload/updatedAt/needsReview는 위치 재번호화 때문에 변경하지 않는다. 제안 preorder/중복/부모 검사와 범위 제한은 유지한다.
 
 제목 필드: ref, status, reason, evidence, followUp, isHeading(true/false/null), level, parentRef, sectionNumber, part, position. 비제목/미확정은 level=null과 빈 부모/번호/구분을 요구한다. 정상·오류 확인에는 제목 여부를 먼저 판단해야 한다. 정상은 관련 3단계 제목/비제목 역할과 일치해야 하고 원본 순서 미확정 제목의 정상 계층 확정을 제한한다.
 
@@ -63,3 +67,16 @@
 synthetic 입력 및 실제 fixture의 읽기 전용 데이터를 임시 DB·자체 동적 포트·`CANDOC_BUILD_DIR=qa/stage5-dist`로 검증한다. 기존 4380 서버/PID/실제 DB/기존 dist와 4382 미리보기는 제어하지 않는다. 테스트 자체가 만든 자식 프로세스만 재시작한다. 원본과 실제 사용자 기록의 전후 비교는 읽기 전용이며 모델 호출·원격 push·배포·외부 에이전트를 사용하지 않는다.
 
 후보 규칙은 넓은 휴리스틱으로 정답 검증을 대체하지 않는다. 범위 확인은 사용자의 원문 대조 기록이다. 전체 문서의 문맥/누락 자동 판정과 공식 Docling 교정 출력은 후속 범위다.
+
+
+## 로컬 제목 추천 API
+
+기존 `codex-suggestions.mjs` stdio app-server·현재 로그인·read-only ephemeral thread·approvalPolicy never·도구/승인 요청 거절을 재사용한다. 모델 목록 조회에는 thread/turn을 만들지 않는다. 모델 목록은 사용 권한/추론 성공의 증거가 아니다. [공식 app-server 문서](https://learn.chatgpt.com/docs/app-server)의 model/list, thread/start, turn/start outputSchema/effort, final agentMessage/turn.completed 계약을 사용한다.
+
+- GET `/api/heading-models`: model/list의 model/displayName/지원 effort/default effort. 목록/로그인 실패는 503으로 표시하며 가짜 모델 목록을 만들지 않는다.
+- POST `/api/review/heading-suggestions`: revision/model/effort. 전체 유지 JSON 텍스트와 제목 구조·근거·위치를 입력한다. 비제목 본문은 360자로 축약하고 textTruncated/origTruncated를 명시한다. 원본/모든 prov 저장은 그대로 유지한다. 입력 한도 2 MiB, 시간 제한은 기존 1~600초 설정(기본 240초). 이번 실제 fixture 입력 약 1.5 MB다. 모델의 컨텍스트/사용 권한/이용 한도 오류는 실패로 보고한다.
+- GET 같은 경로: in-memory job 상태/추천/오류/stale. 재시작 시 추천은 사라진다. 추천 생성·조회는 검수 DB를 변경하지 않는다.
+- DELETE 같은 경로: 현재 job id의 생성만 취소한다.
+- POST `/api/review/heading-suggestions/preview`: id/groupId/revision/exceptions. 원본/규칙 지문·검수 revision·ref와 예외 부분집합을 확인하고 전체 제안 구조를 다시 검증한다. 오래된 추천은 409, 불가능한 예외 조합은 400. 반환 items를 사용자 승인 후 UI 초안에만 반영한다. 별도 명시 저장에도 기존 revision 충돌 검사를 적용한다.
+
+추천은 reason과 changes(ref/isHeading/level/parentRef/sectionNumber)의 묶음이다. 서버가 실제 before/after를 붙인다. 없는/중복 ref, 잘못된 부모·깊이·순환·비연속/겹친 순서 구조는 거부한다. 승인 전후/구조 저장/검수 확인은 서로 다르며 확정 오류나 confidence 점수는 제공하지 않는다. 위치 재배치를 요구하는 제안은 현재 출력 계약에서 지원하지 않고 유효한 현재 순서의 관계·분류 변경만 허용한다. 새 API 키 방식/Paseo 제품 의존성은 없다.

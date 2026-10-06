@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { extractPageInput, runCodexSuggestions, validateSuggestions } from './codex-suggestions.mjs';
 import { buildRoleSource, createRoleStore } from './role-review.mjs';
 import { createReadingStore } from './reading-review.mjs';
+import { listHeadingModels, runHeadingSuggestions, validateHeadingSuggestions } from './heading-suggestions.mjs';
 import { createHeadingStore } from './heading-review.mjs';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -235,6 +236,7 @@ export function createReviewApp(options = {}) {
     catch { throw new RequestError(400, '올바른 JSON 요청이 필요합니다.'); }
   }
   const send = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
+  let headingJob = { id: null, status: 'idle', suggestions: [], error: null }, headingController, headingTask;
   let suggestionJob = { id: null, status: 'idle', sourceHash: source.sourceHash, ruleHash: source.ruleHash, suggestions: [], error: null };
   let suggestionController;
   let suggestionTask = Promise.resolve();
@@ -249,6 +251,42 @@ export function createReviewApp(options = {}) {
       const pathname = new URL(req.url, 'http://localhost').pathname;
       if (req.method === 'GET' && pathname === '/api/document') { assertInputUnchanged(); return send(res, 200, { ...source.metadata, sourceHash: source.sourceHash, ruleHash: source.ruleHash, pages: source.pages, storageFile: path.relative(workspace, dbPath).replaceAll('\\', '/') }); }
       if (req.method === 'GET' && pathname === '/api/review') { assertInputUnchanged(); return send(res, 200, snapshot()); }
+      if (req.method === 'GET' && pathname === '/api/heading-models') {
+        try { return send(res, 200, { models: await (options.headingModelRunner ?? listHeadingModels)({ cwd: workspace }) }); } catch (error) { throw new RequestError(503, error.message); }
+      }
+      if (pathname === '/api/review/heading-suggestions/preview' && req.method === 'POST') {
+        const body = await bodyOf(req); assertInputUnchanged();
+        if (headingJob.status !== 'completed' || body.id !== headingJob.id || body.revision !== snapshot().revision || headingJob.revision !== body.revision || headingJob.sourceHash !== source.sourceHash || headingJob.ruleHash !== source.ruleHash) throw new RequestError(409, '문서/검수 버전이 바뀐 추천입니다. 새 추천을 요청하세요.');
+        const group = headingJob.suggestions.find(group => group.id === body.groupId);
+        if (!group || !Array.isArray(body.exceptions) || new Set(body.exceptions).size !== body.exceptions.length || body.exceptions.some(ref => !group.changes.some(change => change.ref === ref))) throw new RequestError(400, '추천 묶음과 대상 예외를 확인하세요.');
+        const context = headingStore.context(), items = group.changes.filter(change => !body.exceptions.includes(change.ref)).map(change => change.after);
+        if (!items.length) throw new RequestError(400, '승인할 추천 대상이 없습니다.');
+        try { validateHeadingSuggestions({ suggestions: [{ reason: group.reason, changes: items.map(({ ref,isHeading,level,parentRef,sectionNumber }) => ({ ref,isHeading,level,parentRef,sectionNumber })) }] }, context); } catch (error) { throw new RequestError(400, error.message); }
+        return send(res, 200, { items, revision: headingJob.revision });
+      }
+      if (pathname === '/api/review/heading-suggestions') {
+        assertInputUnchanged();
+        if (req.method === 'GET') return send(res, 200, { ...headingJob, stale: headingJob.revision !== undefined && headingJob.revision !== snapshot().revision });
+        if (req.method === 'POST') {
+          const body = await bodyOf(req);
+          if (headingJob.status === 'running') throw new RequestError(409, '제목 추천을 생성 중입니다.');
+          if (typeof body.model !== 'string' || !body.model || typeof body.effort !== 'string' || !body.effort || body.revision !== snapshot().revision) throw new RequestError(400, '현재 버전과 모델/Reasoning effort를 선택하세요.');
+          const context = headingStore.context(), job = { id: randomUUID(), status: 'running', sourceHash: source.sourceHash, ruleHash: source.ruleHash, revision: body.revision, model: body.model, effort: body.effort, suggestions: [], error: null };
+          headingController = new AbortController(); headingJob = job;
+          headingTask = Promise.resolve().then(async () => {
+            try {
+              const output = await (options.headingSuggestionRunner ?? runHeadingSuggestions)({ context, cwd: workspace, signal: headingController.signal, model: body.model, effort: body.effort });
+              if (headingController.signal.aborted) { job.status = 'cancelled'; return; }
+              assertInputUnchanged();
+              job.suggestions = validateHeadingSuggestions({ suggestions: output.map(group => ({ reason: group.reason, changes: group.changes.map(change => { const row = change.after ?? change; return { ref: row.ref, isHeading: row.isHeading, level: row.level, parentRef: row.parentRef, sectionNumber: row.sectionNumber }; }) })) }, context);
+              job.status = 'completed';
+            } catch (error) { job.status = headingController.signal.aborted ? 'cancelled' : 'failed'; job.error = headingController.signal.aborted ? null : error.message; }
+          });
+          return send(res, 202, job);
+        }
+        if (req.method === 'DELETE') { const body = await bodyOf(req); if (body.id !== headingJob.id) throw new RequestError(409, '현재 제목 추천 ID가 아닙니다.'); headingController?.abort(); await headingTask; return send(res, 200, headingJob); }
+        throw new RequestError(405, '지원하지 않는 제목 추천 요청입니다.');
+      }
       if (req.method === 'GET' && pathname === '/api/heading-review') { assertInputUnchanged(); return send(res, 200, { sourceHash: source.sourceHash, ruleHash: source.ruleHash, ...headingStore.context() }); }
       if (req.method === 'PUT' && pathname === '/api/review/headings') {
         const body = await bodyOf(req);
@@ -371,6 +409,7 @@ export function createReviewApp(options = {}) {
     }
   });
   return { server, dbPath, source, close: async () => {
+    headingController?.abort(); await headingTask;
     suggestionController?.abort();
     await suggestionTask;
     await new Promise((resolve, reject) => server.close(error => { try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); db.close(); } catch (dbError) { reject(dbError); return; } error ? reject(error) : resolve(); }));

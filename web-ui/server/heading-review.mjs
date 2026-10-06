@@ -17,7 +17,14 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
   const rawRows = (table, key) => db.prepare(`SELECT * FROM ${table} WHERE review_id = ? ORDER BY rowid`).all(reviewId).map(row => ({ [key]: row.element_ref ?? row.page_no, ...JSON.parse(row.payload), dependencyHash: row.dependency_hash, needsReview: !!row.needs_review, updatedAt: row.updated_at }));
   const rawHeadings = () => rawRows('heading_reviews', 'ref');
   const rawPages = () => rawRows('outline_pages', 'page');
+  let contextCache, contextKey = -1;
   function context(overrides = []) {
+    if (overrides.length) return buildContext(overrides);
+    const key = db.prepare('SELECT total_changes() AS value').get().value;
+    if (contextKey !== key) { contextCache = buildContext(); contextKey = key; }
+    return contextCache;
+  }
+  function buildContext(overrides = []) {
     const decisions = db.prepare('SELECT page_no AS page,status FROM page_decisions WHERE review_id = ? ORDER BY page_no').all(reviewId);
     const excluded = new Set(decisions.filter(row => row.status === 'excluded').map(row => row.page));
     const retained = item => !item.pages.length || item.pages.some(page => !excluded.has(page));
@@ -50,13 +57,22 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
       const readingFields = heading ? [orders.map(target => [target.id, savedReading.orderReviews.find(row => row.id === target.id)?.order ?? null]), boundaries.map(target => { const row = savedReading.boundaryReviews.find(row => row.id === target.id); return [target.id, row?.links ?? null, row?.noConnection ?? null]; })] : [];
       return { pending, hash: digest([roleFields, pages.map(page => [page, decisions.find(row => row.page === page)?.status]), readingFields]) };
     }
+    const sourceTitles = activeTexts.filter(item => ['section_header', 'title'].includes(item.label));
     const allTexts = activeTexts.map(item => {
       const role = roles.get(item.ref), hints = [];
       if (['section_header', 'title'].includes(item.label)) hints.push('원본 제목 라벨');
       if (role?.role === 'title') hints.push('3단계 제목 역할');
       const numberHint = item.text.match(/^\s*((?:\d+(?:\.\d+)*\.?|[A-Z](?:\.\d+)*\.?|Annex\s+[A-Z]))\s+/i)?.[1] ?? '';
       if (numberHint) hints.push('절 번호 형태');
-      if (item.text.trim() && item.text.trim().length <= 180 && !item.ref.startsWith('#/groups/')) hints.push('짧은 텍스트');
+      // Shortness alone is not heading evidence. Numbered prose/list markers
+      // need a neighbouring classified heading with the same numbering family.
+      const neighbouring = sourceTitles.filter(other => other.pages.some(page => item.pages.some(p => Math.abs(p - page) <= 1)));
+      if (numberHint && item.label === 'text' && item.text.length <= 180 && neighbouring.some(other => {
+        const otherNumber = other.text.match(/^\s*((?:\d+(?:\.\d+)*|[A-Z](?:\.\d+)+|Annex\s+[A-Z]))(?:\.|\s)/i)?.[1];
+        if (!otherNumber) return false;
+        if (/^\d/.test(numberHint) && /^\d/.test(otherNumber)) { const own = numberHint.replace(/\.$/, '').split('.'), neighbour = otherNumber.split('.'); return own.length > 1 ? own[0] === neighbour[0] : Math.abs(Number(own[0]) - Number(neighbour[0])) <= 1 && Math.abs((tree.treeOrder.get(item.ref) ?? 9999) - (tree.treeOrder.get(other.ref) ?? 0)) <= 8; }
+        return numberHint.split('.')[0].toLowerCase() === otherNumber.split('.')[0].toLowerCase();
+      })) hints.push('주변 제목과 번호 체계 대조 후보');
       if (records.has(item.ref)) hints.push('명시적으로 검토한 항목');
       const row = records.get(item.ref), dependency = dependencies([item], !!row?.isHeading);
       const parent = row?.parentRef ? records.get(row.parentRef) : null;
@@ -64,9 +80,21 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
       const dependencyHash = digest([dependency.hash, row?.parentRef ? [row.parentRef, semantic(parent)] : null]);
       const ownOccurrences = occurrences.filter(entry => entry.ref === item.ref);
       const running = !!role && !role.needsReview && ['normal', 'error'].includes(role.status) && ['header', 'footer', 'page_number'].includes(role.role);
-      return { ...item, hints, numberHint, originalLevel: source.headingHints?.[item.ref]?.level ?? null, marker: source.headingHints?.[item.ref]?.marker ?? '', sourceIndex: tree.treeOrder.get(item.ref) ?? null, readingIndex: rank.get(item.ref) ?? null, readingOccurrences: ownOccurrences.map(entry => ({ id: entry.id, page: entry.page, state: readingStates.get(entry.id) })), running, pending: dependency.pending, dependencyHash, candidate: !!hints.length };
+      return { ...item, hints, numberHint, originalLevel: source.headingHints?.[item.ref]?.level ?? null, marker: source.headingHints?.[item.ref]?.marker ?? '', sourceIndex: tree.treeOrder.get(item.ref) ?? null, readingIndex: rank.get(item.ref) ?? null, readingOccurrences: ownOccurrences.map(entry => ({ id: entry.id, page: entry.page, state: readingStates.get(entry.id) })), running, pending: dependency.pending, dependencyHash, candidate: !!hints.length && (!numberHint || hints.some(h => h !== '절 번호 형태')) };
     });
     allTexts.sort((a, b) => (a.readingIndex ?? Number.MAX_SAFE_INTEGER) - (b.readingIndex ?? Number.MAX_SAFE_INTEGER));
+    const stack = [];
+    for (const item of allTexts) {
+      const saved = records.get(item.ref), role = roles.get(item.ref);
+      item.classifiedHeading = saved ? saved.isHeading === true : ['section_header', 'title'].includes(item.label) || role?.role === 'title';
+      const sourceLevel = Number.isInteger(item.originalLevel) && item.originalLevel > 0 ? item.originalLevel : 1;
+      while (stack.length && stack.at(-1).sourceLevel >= sourceLevel) stack.pop();
+      const parent = textMap.has(item.parentRef) && allTexts.find(other => other.ref === item.parentRef)?.classifiedHeading ? allTexts.find(other => other.ref === item.parentRef)?.initialDraft : stack.at(-1)?.row;
+      item.initialDraft = saved ?? { ref: item.ref, status: '', reason: '', followUp: '', evidence: 'json', isHeading: item.classifiedHeading ? true : null, level: item.classifiedHeading ? (parent?.level ?? 0) + 1 : null, parentRef: item.classifiedHeading ? parent?.ref ?? '' : '', sectionNumber: item.classifiedHeading ? item.numberHint : '', part: item.classifiedHeading ? parent?.part || 'body' : '', position: item.readingIndex ?? Number(item.ref.split('/').at(-1)) };
+      if (item.classifiedHeading) stack.push({ sourceLevel, row: item.initialDraft });
+      item.missingCandidate = !item.classifiedHeading && !item.running && item.hints.includes('주변 제목과 번호 체계 대조 후보');
+      if (item.classifiedHeading) item.candidate = true;
+    }
     const candidates = allTexts.filter(item => item.candidate);
     const pageScopes = decisions.filter(row => row.status !== 'excluded').map(decision => {
       const items = source.roleSource.items.filter(item => item.pages.includes(decision.page));
@@ -76,6 +104,11 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
       return { page: decision.page, refs, pending, dependencyHash: digest([dependency.hash, refs.map(ref => [ref, semantic(records.get(ref))])]) };
     });
     const diagnoses = [];
+    for (const item of allTexts.filter(item => item.classifiedHeading)) {
+      if (item.originalLevel !== null && item.originalLevel !== item.initialDraft.level && !records.has(item.ref)) diagnoses.push({ kind: 'depth', refs: [item.ref], message: `원본 수준 ${item.originalLevel} · 상위 관계와 깊이 대조 필요` });
+      if (item.running) diagnoses.push({ kind: 'classification', refs: [item.ref], message: '반복 머리말 역할과 제목 라벨 충돌' });
+      if (item.numberHint && /^\d+(?:\.\d+)+/.test(item.numberHint) && item.numberHint.replace(/\.$/, '').split('.').length !== item.initialDraft.level) diagnoses.push({ kind: 'number_depth', refs: [item.ref], message: '절 번호와 깊이 차이 · 번호는 근거일 뿐' });
+    }
     for (const item of candidates) if (item.sourceIndex === null) diagnoses.push({ kind: 'source_order', refs: [item.ref], message: '원본 트리 순서 미확정' });
     for (const field of ['text', 'number']) {
       const groups = new Map();
@@ -122,24 +155,27 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
   }
   function save(body) {
     if (!Array.isArray(body.items) || !Array.isArray(body.pages) || !body.items.length && !body.pages.length || new Set(body.items.map(row => row?.ref)).size !== body.items.length || new Set(body.pages.map(row => row?.page)).size !== body.pages.length) fail(400, '저장할 제목/페이지 대상을 중복 없이 명시하세요.');
+    if (body.confirmedRefs !== undefined && !Array.isArray(body.confirmedRefs)) fail(400, '명시적 검수 확인 대상은 배열이어야 합니다.');
+    const confirmed = body.confirmedRefs === undefined ? new Set(body.items.map(row => row.ref)) : new Set(body.confirmedRefs);
+    if (body.confirmedRefs !== undefined && (!Array.isArray(body.confirmedRefs) || confirmed.size !== body.confirmedRefs.length || [...confirmed].some(ref => !body.items.some(row => row.ref === ref)))) fail(400, '명시적 검수 확인 대상은 저장 항목의 중복 없는 부분집합이어야 합니다.');
     const c = context(), before = { headings: rawHeadings().filter(row => body.items.some(item => item.ref === row.ref)), pages: rawPages().filter(row => body.pages.some(item => item.page === row.page)) };
     const sanitized = body.items.map(row => {
       const item = c.allTexts.find(item => item.ref === row?.ref); if (!item) fail(400, '현재 유지 범위의 원본 텍스트를 선택하세요.');
-      const payload = common(row, item.pages);
+      const payload = common(confirmed.has(row.ref) ? row : { ...row, status: row.status || 'suspected', reason: row.reason || '계층 구조 저장 · 검수 미확인', followUp: row.followUp || '변경 구조와 제목 여부를 확인하세요.' }, item.pages);
       if (![true, false, null].includes(row.isHeading) || typeof row.parentRef !== 'string' || typeof row.sectionNumber !== 'string' || row.sectionNumber.length > 100 || !Number.isFinite(row.position) || row.position < 0 || row.position > texts.length * 100) fail(400, '제목 여부·위치·절 번호·부모를 명시하세요.');
       if (row.isHeading === true && (!Number.isInteger(row.level) || row.level < 1 || row.level > 9 || !documentParts.filter(part => !['mixed', 'unknown'].includes(part)).includes(row.part))) fail(400, '제목의 수준 1~9와 문서 구분을 선택하세요.');
       if (row.isHeading !== true && (row.level !== null || row.parentRef || row.sectionNumber || row.part)) fail(400, '비제목/미확정 항목에 제목 구조를 남길 수 없습니다.');
       if (['normal', 'error'].includes(row.status) && row.isHeading === null) fail(400, '제목 여부를 먼저 판단하세요.');
-      if (row.status === 'normal' && row.isHeading && item.sourceIndex === null) fail(400, '원본 순서 미확정 제목의 계층을 정상 확정할 수 없습니다.');
+      if (confirmed.has(row.ref) && row.status === 'normal' && row.isHeading && item.sourceIndex === null) fail(400, '원본 순서 미확정 제목의 계층을 정상 확정할 수 없습니다.');
       const role = roleStore.records().find(role => role.ref === row.ref);
-      if (row.status === 'normal' && (row.isHeading ? role?.role !== 'title' || ['header', 'footer'].includes(role?.region) : role?.role === 'title')) fail(400, '제목 여부와 관련 역할 판단의 차이를 오류/의심으로 검토하세요.');
+      if (confirmed.has(row.ref) && row.status === 'normal' && (row.isHeading ? role?.role !== 'title' || ['header', 'footer'].includes(role?.region) : role?.role === 'title')) fail(400, '제목 여부와 관련 역할 판단의 차이를 오류/의심으로 검토하세요.');
       return { ref: row.ref, ...payload, isHeading: row.isHeading, level: row.level, parentRef: row.parentRef, sectionNumber: row.sectionNumber.trim(), part: row.part, position: row.position };
     });
-    const combined = new Map(rawHeadings().map(row => [row.ref, row])); for (const row of sanitized) combined.set(row.ref, row);
+    const combined = new Map(c.allTexts.filter(item => item.classifiedHeading).map(item => [item.ref, item.initialDraft])); for (const row of rawHeadings()) combined.set(row.ref, row); for (const row of sanitized) combined.set(row.ref, row);
     for (const row of sanitized) {
       const seen = new Set([row.ref]); let parentRef = row.parentRef;
       while (parentRef) { if (seen.has(parentRef)) fail(400, '제목 계층 순환/자기 참조를 허용하지 않습니다.'); seen.add(parentRef); const parent = combined.get(parentRef); if (!parent || !c.allTexts.some(item => item.ref === parentRef) || !parent.isHeading) fail(400, '현재 범위의 제목 부모를 선택하세요.'); parentRef = parent.parentRef; }
-      if (['normal', 'error'].includes(row.status) && row.isHeading) {
+      if (confirmed.has(row.ref) && ['normal', 'error'].includes(row.status) && row.isHeading) {
         const parent = row.parentRef ? combined.get(row.parentRef) : null;
         if (parent && (!['normal', 'error'].includes(parent.status) || parent.needsReview && !sanitized.some(item => item.ref === parent.ref) || parent.level + 1 !== row.level || parent.part !== row.part) || !parent && row.level !== 1) fail(400, '제목 수준과 상위 제목·문서 구분을 함께 확인하세요.');
       }
@@ -148,9 +184,11 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
     let expanded = true;
     while (expanded) { expanded = false; for (const row of combined.values()) if (changedParents.has(row.parentRef) && !changedParents.has(row.ref)) { changedParents.add(row.ref); expanded = true; } }
     const proposed = [...combined.values()].filter(row => c.allTexts.some(item => item.ref === row.ref)).map(row => ({ ...row, needsReview: !!row.needsReview || changedParents.has(row.ref) && !sanitized.some(item => item.ref === row.ref) }));
-    validateHeadingForest(proposed, fail);
+    const structuralAncestors = new Set(sanitized.map(row => row.ref));
+    for (const row of sanitized) { let parent = row.parentRef; const seen = new Set(); while (parent && !seen.has(parent)) { seen.add(parent); structuralAncestors.add(parent); parent = combined.get(parent)?.parentRef; } }
+    validateHeadingForest(proposed.map(row => structuralAncestors.has(row.ref) ? { ...row, needsReview: false } : row), fail);
     const effective = context(sanitized);
-    for (const row of sanitized) { const target = effective.allTexts.find(item => item.ref === row.ref); if (['normal', 'error'].includes(row.status) && target.pending.length) fail(400, '관련 영역·역할·읽기 순서를 먼저 확인하세요. 독립 검토는 의심/판단 불가로 기록하세요.'); }
+    for (const row of sanitized) { const target = effective.allTexts.find(item => item.ref === row.ref); if (confirmed.has(row.ref) && ['normal', 'error'].includes(row.status) && target.pending.length) fail(400, '관련 영역·역할·읽기 순서를 먼저 확인하세요. 독립 검토는 의심/판단 불가로 기록하세요.'); }
     if (body.range) {
       const { from, to, exceptions } = body.range;
       if (!Number.isInteger(from) || !Number.isInteger(to) || from > to || !Array.isArray(exceptions) || new Set(exceptions).size !== exceptions.length || exceptions.some(page => !Number.isInteger(page) || page < from || page > to || !c.pageScopes.some(row => row.page === page))) fail(400, '개요 구간과 제외할 예외를 명시하세요.');
@@ -184,11 +222,11 @@ export function createHeadingStore({ db, reviewId, source, roleStore, readingSto
     while (added) { added = false; for (const row of rawHeadings()) if (changed.has(row.parentRef) && !changed.has(row.ref)) { changed.add(row.ref); added = true; } }
     for (const ref of changed) if (!sanitized.some(row => row.ref === ref)) db.prepare('UPDATE heading_reviews SET needs_review=1 WHERE review_id=? AND element_ref=?').run(reviewId, ref);
     for (const page of [...new Set(texts.filter(item => changed.has(item.ref)).flatMap(item => item.pages))]) db.prepare('UPDATE outline_pages SET needs_review=1 WHERE review_id=? AND page_no=?').run(reviewId, page);
-    for (const row of sanitized) { const { ref, ...payload } = row, target = effective.allTexts.find(item => item.ref === ref); db.prepare(`INSERT INTO heading_reviews VALUES (?,?,?,?,0,?) ON CONFLICT(review_id,element_ref) DO UPDATE SET payload=excluded.payload,dependency_hash=excluded.dependency_hash,needs_review=0,updated_at=excluded.updated_at`).run(reviewId, ref, JSON.stringify(payload), target.dependencyHash, now()); }
+    for (const row of sanitized) { const { ref, ...payload } = row, target = effective.allTexts.find(item => item.ref === ref); db.prepare(`INSERT INTO heading_reviews VALUES (?,?,?,?,?,?) ON CONFLICT(review_id,element_ref) DO UPDATE SET payload=excluded.payload,dependency_hash=excluded.dependency_hash,needs_review=excluded.needs_review,updated_at=excluded.updated_at`).run(reviewId, ref, JSON.stringify(payload), target.dependencyHash, confirmed.has(ref) ? 0 : 1, now()); }
     // Refresh page fingerprints after heading freshness is committed in this
     // same transaction; missing candidate coverage cannot be manufactured.
     const afterContext = context();
-    for (const row of sanitizedPages) { const { page, dependencyHash, ...payload } = row; db.prepare(`INSERT INTO outline_pages VALUES (?,?,?,?,0,?) ON CONFLICT(review_id,page_no) DO UPDATE SET payload=excluded.payload,dependency_hash=excluded.dependency_hash,needs_review=0,updated_at=excluded.updated_at`).run(reviewId, page, JSON.stringify(payload), afterContext.pageScopes.find(target => target.page === page).dependencyHash, now()); }
+    for (const row of sanitizedPages) { const { page, dependencyHash, ...payload } = row; db.prepare(`INSERT INTO outline_pages VALUES (?,?,?,?,0,?) ON CONFLICT(review_id,page_no) DO UPDATE SET payload=excluded.payload,dependency_hash=excluded.dependency_hash,needs_review=excluded.needs_review,updated_at=excluded.updated_at`).run(reviewId, page, JSON.stringify(payload), afterContext.pageScopes.find(target => target.page === page).dependencyHash, now()); }
     if (structurePages.length) { readingStore.invalidatePages(structurePages); markStages([4], structurePages); }
     if (changed.size || sanitizedPages.some(row => { const old = before.pages.find(old => old.page === row.page); return !old || JSON.stringify([row.status, row.part, row.issues]) !== JSON.stringify([old.status, old.part, old.issues]); })) markStages([5, 6, 7, 8, 9, 10, 11, 12], touchedPages);
     const after = { headings: rawHeadings().filter(row => sanitized.some(item => item.ref === row.ref)), pages: rawPages().filter(row => sanitizedPages.some(item => item.page === row.page)) };
