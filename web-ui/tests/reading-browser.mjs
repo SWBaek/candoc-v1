@@ -11,10 +11,11 @@ import { readingDocument, pixelPng, seedReadingRoles } from './fixtures/reading-
 
 // Only children created here are controlled. They always use a synthetic
 // fixture, an isolated DB, a dynamic port and the explicitly isolated build.
-export async function startProcess(projectDir, dbPath) {
+export async function startProcess(projectDir, dbPath, fixtureOptionsModule) {
   assert.ok(process.env.CANDOC_BUILD_DIR && process.env.CANDOC_BUILD_DIR !== 'dist');
   const moduleUrl = new URL('../server/app.mjs', import.meta.url).href;
-  const code = `import { createReviewApp } from ${JSON.stringify(moduleUrl)}; const app = createReviewApp({projectDir:process.argv[1],dbPath:process.argv[2]}); app.server.listen(0,'127.0.0.1',()=>console.log('TEST_URL=http://127.0.0.1:'+app.server.address().port)); process.on('SIGTERM',async()=>{await app.close();process.exit(0)});`;
+  const extra = fixtureOptionsModule ? `import { annotationOptions } from ${JSON.stringify(fixtureOptionsModule)};` : '';
+  const code = `${extra} import { createReviewApp } from ${JSON.stringify(moduleUrl)}; const app = createReviewApp({${fixtureOptionsModule ? '...annotationOptions(),' : ''}projectDir:process.argv[1],dbPath:process.argv[2]}); app.server.listen(0,'127.0.0.1',()=>console.log('TEST_URL=http://127.0.0.1:'+app.server.address().port)); process.on('SIGTERM',async()=>{await app.close();process.exit(0)});`;
   const child = spawn(process.execPath, ['--input-type=module', '-e', code, projectDir, dbPath], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
   let output = '';
   const url = await new Promise((resolve, reject) => {

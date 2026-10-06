@@ -16,4 +16,13 @@ PNG는 사람이 대조하는 용도로만 사용하고 Agent에는 예시 영�
 
 ## 결과
 
-구현·검증 후 기록한다.
+- 주석/추천 API와 `role_annotations`/`role_annotation_jobs` 보존, 기존 모델/effort/stdio 연결 재사용을 구현했다. 원본 PNG를 Agent에 보내지 않고 bbox·텍스트·모든 provenance/charspan으로 요청한다. 17쪽의 `…Electric Power`와 `Systems Interfaces`는 실제 2 refs로 찾는다. 주석만 저장하거나 추천을 생성해도 역할/coverage/완료는 바뀌지 않는다.
+- 실제 web-ui의 보기 선택에 원본 영역 주석을 추가했다. 상자에 직접 코멘트, 필요할 때 여는 우측 응답, 모델/effort, 묶음별 대상/예외/변경 전후/실제 원본 위치, 명시 판단 저장과 기존 일괄 복원을 연결했다. 마우스·실제 브라우저 touch 이벤트·키보드 영역 조절/일반 Tab과 미저장 이동 보호를 확인했다.
+- `npm test` 65/65, 타입 검사, `CANDOC_BUILD_DIR=qa/role-annotations-dist` 빌드, 전체 페이지/AI/3/4/5 브라우저 회귀 통과. 마지막 모델 설정 복구 및 touch/대비 보강 후 주석 관련 브라우저를 다시 실행해 통과했다. 잘못된 ref/중복/제외 범위/예외/빈 영역/부분 겹침/원자 실패/오래된 요청/생성 중 범위 변경/중단 작업 복구를 격리 API로 확인했다. 실제 별도 자식 서버의 재시작으로 저장한 주석·응답·판단·복원을 확인했다.
+- 실제 문서 17쪽을 두 테마 × 1512/1024/375/320px에서 확인했다. 코멘트 전경 대비 4.5 이상, 44px 행동, 가로 넘침 없음. 로컬 ignored 캡처: `web-ui/qa/role-annotations-{light,dark}-{1512,375}.png`, `role-annotations-sidebar-light-1512.png`, `role-annotations-sidebar-dark-375.png`, 복사 DB의 `role-annotations-retained-light-1512.png`. 검증 로그: `role-annotations-api.log`, `role-annotations-browser.log`, `role-annotations-focused.log`.
+- 전후 원본 168개 지문·기존 static 9개 지문·실제 DB 6테이블의 SQL/전 행·4380의 검수/메모리 추천·4382/4383 검수 API가 동일했다. 기존 PID는 4380=34092, 4382=8000, 4383=25540으로 유지됐다. 실제 DB에 새 주석 테이블을 적용하거나 판단을 쓰지 않았다.
+- 미리보기는 기존 DB를 read-only SQLite backup한 `web-ui/qa/role-annotations-preview-20261007/review.sqlite`를 사용한다. 유지 범위 2953개이며 기존 서버/static과 독립이다. 해당 ignored `serve.mjs`는 새 포트를 자동 배정하며 `stdout-ready.log`에 주소/PID를 남긴다. 이번 주소는 `http://127.0.0.1:3696`, 실제 node PID 43836. 기존 4380 UI는 업데이트/재시작하지 않았다.
+
+## 제한
+
+실제 모델 호출/추천 품질 검증은 수행하지 않았다. 테스트 응답은 합성임을 구분하며 제품에 가짜 추천 fallback을 추가하지 않았다. 상자에 대응하는 JSON 텍스트가 없으면 주석 저장을 막고 누락을 추정하지 않는다. JSON에 없는 줄 단위 hbox도 만들지 않는다. 제안은 머리말/꼬리말/페이지 번호이며 소속/문구 병합이나 교정 사본 적용은 범위 밖이다. 검수 버전 변경은 보수적으로 이전 모든 추천을 오래된 것으로 만들며, 한 묶음 저장 후 다른 이전 묶음을 저장하려면 재요청해야 한다. 지속 대화/후속 질문에 대한 자유 대화가 아니라 주석별 구조화 요청/응답이다. 검수 기록을 저장했으며 교정된 DoclingDocument 사본/공식 스키마·HTML 변환 결과는 생성하지 않았다.

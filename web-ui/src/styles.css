@@ -163,6 +163,42 @@ h1 { font-size: var(--font-title); line-height: 1.35; font-weight: var(--weight-
 .role-check input { width: var(--control-touch); height: var(--control-touch); flex-shrink: 0; accent-color: var(--primary); }
 .role-question-tools { border-top: var(--stroke) solid var(--border); margin-top: var(--space-4); }
 .role-questions summary { min-height: var(--control-touch); display: flex; align-items: center; cursor: pointer; }
+.role-annotation-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.role-annotation-layout.role-annotation-panel-open { grid-template-columns: minmax(0, 1fr) 360px; }
+.role-annotation-main, .role-annotation-panel { min-width: 0; }
+.role-annotation-canvas { position: relative; max-width: 800px; margin-inline: auto; background: var(--soft); }
+.role-annotation-canvas > img { display: block; width: 100%; height: auto; user-select: none; }
+.role-annotation-canvas.is-drawing { cursor: crosshair; touch-action: none; }
+.role-annotation-box { position: absolute; border: var(--stroke-selected) solid var(--border); pointer-events: none; box-sizing: border-box; }
+.role-annotation-box.is-active { border-color: var(--primary); }
+.role-annotation-marker { pointer-events: auto; position: absolute; top: 0; left: 0; max-width: 100%; }
+.role-annotation-comment { position: absolute; width: min(380px, 55%); z-index: 2; padding: var(--space-3); background: var(--background); color: var(--foreground); border: var(--stroke) solid var(--border); border-radius: var(--radius-panel); box-shadow: var(--shadow-popover); font-size: var(--font-label); }
+.role-annotation-comment.above-box { transform: translateY(-100%); }
+.role-annotation-comment textarea { margin-block: var(--space-2); }
+.role-annotation-review .ui-button { min-height: var(--control-touch); }
+.role-annotation-comment p { font-size: var(--font-caption); line-height: var(--line-body); }
+.role-annotation-panel { position: sticky; top: var(--space-4); border: var(--stroke) solid var(--border); border-radius: var(--radius-panel); background: var(--background); color: var(--foreground); max-height: calc(100dvh - var(--space-8)); overflow: auto; }
+.role-annotation-thread { padding: var(--space-3); display: grid; gap: var(--space-3); font-size: var(--font-label); line-height: var(--line-body); overflow-wrap: anywhere; }
+.role-annotation-thread select { width: 100%; min-width: 0; }
+.role-annotation-message { background: var(--soft); padding: var(--space-3); border-radius: var(--radius-panel); }
+.role-annotation-message p { white-space: pre-wrap; margin-block: var(--space-2); }
+.role-annotation-settings label { display: block; margin-block: var(--space-2); }
+.role-annotation-response { border-top: var(--stroke) solid var(--border); padding-top: var(--space-3); }
+.role-annotation-response > p { margin-bottom: var(--space-2); }
+.role-annotation-target { padding-block: var(--space-2); border-bottom: var(--stroke) solid var(--border); }
+.role-annotation-target label { display: block; }
+.role-annotation-target small { display: block; color: var(--muted); }
+.role-annotation-target input { width: var(--control-touch); height: var(--control-touch); vertical-align: middle; }
+.role-annotation-main pre { max-height: 240px; overflow: auto; background: var(--soft); font-size: var(--font-caption); }
+.role-annotation-backdrop { display: none; }
+@media (max-width: 970px) {
+  .role-annotation-layout.role-annotation-panel-open { grid-template-columns: minmax(0, 1fr); }
+  .role-annotation-panel { position: fixed; z-index: 12; top: 0; right: 0; bottom: 0; width: min(420px, 100%); max-height: 100dvh; border-radius: 0; }
+  .role-annotation-backdrop { display: block; position: fixed; inset: 0; z-index: 11; background: #0009; }
+}
+@media (max-width: 600px) {
+  .role-annotation-comment { width: 100%; left: 0 !important; }
+}
 @media (max-width: 700px) { .role-page-overview { grid-template-columns: minmax(0, 1fr); } .role-representatives { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; } .role-representatives > article { flex: 0 0 88%; min-width: 0; scroll-snap-align: start; } .role-representatives:has(> :only-child) > article { flex-basis: 100%; } }
 .role-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
 .role-toolbar > span, .role-scope-note { color: var(--muted); font-size: var(--font-label); }
