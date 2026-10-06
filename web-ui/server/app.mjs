@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { extractPageInput, runCodexSuggestions, validateSuggestions } from './codex-suggestions.mjs';
 import { buildRoleSource, createRoleStore } from './role-review.mjs';
 import { createRoleQuestionStore } from './role-questions.mjs';
+import { createRoleAnnotationStore, runAnnotationSuggestions, validateAnnotationSuggestions } from './role-annotations.mjs';
 import { createReadingStore } from './reading-review.mjs';
 import { listHeadingModels, runHeadingSuggestions, validateHeadingSuggestions } from './heading-suggestions.mjs';
 import { createHeadingStore } from './heading-review.mjs';
@@ -155,6 +156,7 @@ export function createReviewApp(options = {}) {
   let readingStore, headingStore;
   const roleStore = createRoleStore({ db, reviewId, source, now, fail, onChange: pages => { readingStore?.invalidatePages(pages); headingStore?.invalidatePages(pages); } });
   const roleQuestions = createRoleQuestionStore({ db, reviewId, source, roleStore, now, fail });
+  const roleAnnotations = createRoleAnnotationStore({ db, reviewId, source, roleStore, now, fail });
   readingStore = createReadingStore({ db, reviewId, source, roleStore, now, fail, onChange: pages => headingStore?.invalidatePages(pages) });
   headingStore = createHeadingStore({ db, reviewId, source, roleStore, readingStore, now, fail });
   const baseline = new Map([jsonPath, rulePath].map(file => [file, statSync(file)]));
@@ -239,6 +241,7 @@ export function createReviewApp(options = {}) {
   }
   const send = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
   let headingJob = { id: null, status: 'idle', suggestions: [], error: null }, headingController, headingTask;
+  let annotationController, annotationTask;
   let suggestionJob = { id: null, status: 'idle', sourceHash: source.sourceHash, ruleHash: source.ruleHash, suggestions: [], error: null };
   let suggestionController;
   let suggestionTask = Promise.resolve();
@@ -253,8 +256,39 @@ export function createReviewApp(options = {}) {
       const pathname = new URL(req.url, 'http://localhost').pathname;
       if (req.method === 'GET' && pathname === '/api/document') { assertInputUnchanged(); return send(res, 200, { ...source.metadata, sourceHash: source.sourceHash, ruleHash: source.ruleHash, pages: source.pages, storageFile: path.relative(workspace, dbPath).replaceAll('\\', '/') }); }
       if (req.method === 'GET' && pathname === '/api/review') { assertInputUnchanged(); return send(res, 200, snapshot()); }
-      if (req.method === 'GET' && pathname === '/api/heading-models') {
-        try { return send(res, 200, { models: await (options.headingModelRunner ?? listHeadingModels)({ cwd: workspace }) }); } catch (error) { throw new RequestError(503, error.message); }
+      if (req.method === 'GET' && ['/api/heading-models', '/api/role-models'].includes(pathname)) {
+        try { return send(res, 200, { models: await (pathname === '/api/role-models' ? options.roleModelRunner ?? listHeadingModels : options.headingModelRunner ?? listHeadingModels)({ cwd: workspace }) }); } catch (error) { throw new RequestError(503, error.message); }
+      }
+      if (pathname === '/api/role-annotations' && req.method === 'GET') { assertInputUnchanged(); return send(res, 200, roleAnnotations.snapshot()); }
+      if (pathname === '/api/review/role-annotations' && req.method === 'PUT') {
+        const body = await bodyOf(req); return send(res, 200, mutate(body, () => roleAnnotations.create(body)));
+      }
+      if (pathname === '/api/review/role-annotation-apply' && req.method === 'PUT') {
+        const body = await bodyOf(req); return send(res, 200, mutate(body, () => roleAnnotations.saveSuggestion(body)));
+      }
+      if (pathname === '/api/review/role-annotation-suggestions') {
+        assertInputUnchanged();
+        if (req.method === 'POST') {
+          const body = await bodyOf(req), { job, input } = roleAnnotations.createJob(body);
+          const controller = new AbortController(); annotationController = controller;
+          annotationTask = Promise.resolve().then(async () => {
+            try {
+              const output = await (options.roleAnnotationRunner ?? runAnnotationSuggestions)({ context: input, cwd: workspace, signal: controller.signal, model: body.model, effort: body.effort });
+              if (controller.signal.aborted) { job.status = 'cancelled'; return; }
+              assertInputUnchanged();
+              job.suggestions = validateAnnotationSuggestions({ suggestions: output.map(group => ({ reason: group.reason, region: group.changes[0]?.after.region, role: group.changes[0]?.after.role, refs: group.changes.map(change => change.ref) })) }, input);
+              job.status = 'completed';
+            } catch (error) { job.status = controller.signal.aborted ? 'cancelled' : 'failed'; job.error = controller.signal.aborted ? null : error.message; }
+            finally { roleAnnotations.persistJob(job); }
+          });
+          return send(res, 202, job);
+        }
+        if (req.method === 'DELETE') {
+          const body = await bodyOf(req), job = roleAnnotations.snapshot().jobs.find(job => job.status === 'running');
+          if (!job || job.id !== body.id) throw new RequestError(409, '현재 생성 중인 영역 추천 ID가 아닙니다.');
+          annotationController?.abort(); await annotationTask; return send(res, 200, roleAnnotations.snapshot());
+        }
+        throw new RequestError(405, '지원하지 않는 영역 추천 요청입니다.');
       }
       if (pathname === '/api/review/heading-suggestions/preview' && req.method === 'POST') {
         const body = await bodyOf(req); assertInputUnchanged();
@@ -423,6 +457,7 @@ export function createReviewApp(options = {}) {
     }
   });
   return { server, dbPath, source, close: async () => {
+    annotationController?.abort(); await annotationTask;
     headingController?.abort(); await headingTask;
     suggestionController?.abort();
     await suggestionTask;

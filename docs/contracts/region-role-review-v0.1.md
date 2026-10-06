@@ -37,6 +37,16 @@ keep는 사유가 있는 제안 거절 기록이며 역할 기록/정상 coverag
 
 ## 판단·저장·복원
 
+### 영역 주석과 Agent 추천 (2026-10-07)
+
+`GET /api/role-annotations`는 문서/규칙 지문, 원본 페이지·TOPLEFT 정규화 상자·코멘트·대응 refs/각 provIndex/겹침 비율의 주석 및 연결된 추천 작업을 반환한다. 주석은 역할 확인이 아니다. `PUT /api/review/role-annotations`는 revision/sourceHash/ruleHash/page/rect(left,top,width,height)/comment를 받아 이미지가 있는 유지 페이지의 실제 JSON 텍스트 bbox와 겹침이 있는 경우에만 새 주석을 저장한다. 부분 겹침도 표시하며 JSON에 없는 요소나 줄 단위 hbox를 추정하지 않는다. 기존 주석 수정 대신 새 주석으로 기록한다. 저장은 revision 트랜잭션을 사용하며 실패 시 주석/검수 버전 모두 보존한다.
+
+`GET /api/role-models`는 기존 app-server의 모델/지원 effort 목록이다. `POST /api/review/role-annotation-suggestions`는 revision/sourceHash/ruleHash/annotationId/model/effort를 받아 202 작업을 시작한다. 주석과 유지 페이지 JSON 텍스트·정규화 좌표·원본 bbox·all prov/charspan·orig/text·소속·현재 역할 기록으로 구조화된 추천을 요청한다. PNG는 Agent 입력에 포함하지 않는다. 같은 좌표 전체에 적용하거나 문구/출처를 합치거나 누락 내용을 복원하지 않는다. 머리말/꼬리말/페이지 번호의 독립 묶음만 제안하며 실제 ref·중복·유지 범위·유효 bbox·역할/영역을 서버에서 검증한다. 잘못된 응답은 failed로 남기고 역할 판단을 저장하지 않는다. 생성 시점의 source/rule/revision에 추천을 묶는다. `DELETE`는 현재 생성 중 id만 취소한다.
+
+주석/요청 모델·effort/상태/근거/추천 전후는 `role_annotations`, `role_annotation_jobs`에 보존한다. 재시작 시 생성 중이던 작업은 failed와 재요청 안내로 남기며 완료 응답은 그대로 복구한다. 응답과 주석의 생성/조회/취소는 역할/완료 coverage를 만들지 않는다. 모델이 입력 밖 도구/권한을 요청하면 기존 연결이 거부한다. 연결 기반: [공식 Codex app-server 문서](https://learn.chatgpt.com/docs/app-server). 이번 구현은 기존 로그인·stdio·read-only/ephemeral·도구 비활성 설정을 재사용한다.
+
+`PUT /api/review/role-annotation-apply`는 revision/sourceHash/ruleHash/id/groupId/exceptions를 받는다. 클라이언트가 새 역할이나 대상 refs를 주입할 수 없고 서버에 저장된 해당 추천에서 예외만 제외한다. 모든 버전·대상·예외를 검증한 뒤 기존 roleStore.saveBatch로 선택 대상별 기록을 원자적으로 저장한다. 현재 잠정 소속을 보존하고 알려진 원본 역할과의 차이는 사용자의 명시 확인 시에만 error, 같은 역할은 normal로 기록한다. 근거는 JSON이며 이미지 확인을 자동 기록하지 않는다. 다중 출처 판단은 해당 요소 전체에 적용하고 제외/유지 혼합 출처도 보존한다. 범위 밖/예외/무관한 기록은 바꾸지 않는다. 기존 일괄 판단 복원 API와 완료 제한을 유지한다. 한 묶음 저장 후 검수 버전이 바뀌므로 다른 이전 추천도 다시 요청해야 한다.
+
 판단 필드: `status`(normal/error/suspected/unjudgeable), `region`, `role`, `parentRef`, `reason`, `evidence`(json/page_image/both), `followUp`. 영역·큰 역할·소속은 잠정 검수 판단이며 Docling 라벨 변경 명령이 아니다. 빈 `parentRef`는 각 대상의 원본 소속 유지다.
 
 모든 판단에 사유가 필요하다. 정상은 영역·역할이 미확정이면 저장하지 않는다. 의심·판단 불가는 후속 확인이 필요하다. 사용할 원문 이미지가 없으면 이미지 근거를 허용하지 않는다. 없는 소속 대상·자기 참조·잠정 소속 순환은 거부한다.
