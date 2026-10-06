@@ -1,0 +1,12 @@
+node_modules/
+dist/
+qa/
+__pycache__/
+.venv/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+.env
+.env.*
+!.env.example

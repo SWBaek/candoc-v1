@@ -1,0 +1,103 @@
+:root {
+  --background: #ffffff;
+  --foreground: #292926;
+  --canvas: #f7f7f5;
+  --sidebar: #fcfcfa;
+  --soft: #f1f1ee;
+  --muted: #686860;
+  --border: #e7e7e2;
+  --primary: #292926;
+  --primary-foreground: #ffffff;
+  --current: #eeeee9;
+  --done: #edf5ee;
+  --done-fg: #477455;
+  --warning: #985c09;
+  --warning-bg: #fff8e9;
+  --excluded: #99544c;
+  --excluded-bg: #fff7f4;
+  --danger: #a33333;
+  --danger-bg: #fff3f3;
+
+  --font-caption: 12px;
+  --font-label: 13px;
+  --font-body: 14px;
+  --font-heading: 18px;
+  --font-title: 22px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --line-body: 1.6;
+  --line-label: 1.4;
+
+  --space-half: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-small: 4px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-dialog: 12px;
+  --radius-pill: 999px;
+  --control-sm: 32px;
+  --control-md: 36px;
+  --control-lg: 40px;
+  --control-touch: 44px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --stroke: 1px;
+  --stroke-selected: 2px;
+  --sidebar-width: 248px;
+  --shadow-paper: 0 1px 2px #00000006;
+  --shadow-popover: 0 8px 24px #00000012;
+  --shadow-dialog: 0 12px 55px #00000040;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #1e1e1c;
+    --foreground: #e8e8e3;
+    --canvas: #151513;
+    --sidebar: #1c1c1a;
+    --soft: #282825;
+    --muted: #9a9a91;
+    --border: #33332e;
+    --primary: #e4e4de;
+    --primary-foreground: #1e1e1b;
+    --current: #292926;
+    --done: #213326;
+    --done-fg: #95bd9f;
+    --warning: #f5c976;
+    --warning-bg: #382f20;
+    --excluded: #e3aca1;
+    --excluded-bg: #302322;
+    --danger: #f1a4a4;
+    --danger-bg: #39282a;
+  }
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #1e1e1c;
+  --foreground: #e8e8e3;
+  --canvas: #151513;
+  --sidebar: #1c1c1a;
+  --soft: #282825;
+  --muted: #9a9a91;
+  --border: #33332e;
+  --primary: #e4e4de;
+  --primary-foreground: #1e1e1b;
+  --current: #292926;
+  --done: #213326;
+  --done-fg: #95bd9f;
+  --warning: #f5c976;
+  --warning-bg: #382f20;
+  --excluded: #e3aca1;
+  --excluded-bg: #302322;
+  --danger: #f1a4a4;
+  --danger-bg: #39282a;
+}

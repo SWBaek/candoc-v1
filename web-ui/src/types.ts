@@ -1,0 +1,10 @@
+export type DecisionStatus = 'unreviewed' | 'included' | 'excluded' | 'pending';
+export type Evidence = '' | 'page_image' | 'json' | 'both' | 'selection';
+export type PageInfo = { number: number; width: number; height: number; imageAvailable: boolean; imageUrl: string; textCount: number; tableCount: number; pictureCount: number; previewText: string };
+export type DocumentInfo = { name: string; originalFile: string | null; schemaName: string; schemaVersion: string | null; converterVersion: string | null; sourceFile: string; sourceHash: string; ruleHash: string; ruleVersion: string; pageCount: number; textCount: number; tableCount: number; pictureCount: number; pages: PageInfo[]; storageFile: string; input: { readable: boolean; versionConfirmed: boolean; confirmedSchemaVersion: string; missingImages: number[] } };
+export type PageDecision = { page: number; status: DecisionStatus; reason: string; note: string; evidence: Evidence; updatedAt: string | null };
+export type Stage = { id: number; name: string; status: 'pending' | 'completed' | 'needs_review'; note: string; completedAt: string | null };
+export type Review = { revision: number; activeStage: number; selectedPage: number; selectedPages: number[]; panelVisible: boolean; thumbnailSize: number; filter: string; updatedAt: string; sourceHash: string; decisions: PageDecision[]; stages: Stage[]; impacts: { stage: number; page: number; affectedPages: number[]; createdAt: string }[] };
+export type ElementInfo = { ref: string; label: string; text: string; bbox: { l: number; t: number; r: number; b: number; coord_origin: string } };
+export type PageSuggestion = { pages: number[]; reason: string };
+export type SuggestionJob = { id: string | null; status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'; sourceHash: string; ruleHash: string; suggestions: PageSuggestion[]; error: string | null };
