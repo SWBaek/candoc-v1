@@ -13,6 +13,7 @@ import { createReadingStore } from './reading-review.mjs';
 import { listHeadingModels, runHeadingSuggestions, validateHeadingSuggestions } from './heading-suggestions.mjs';
 import { createHeadingStore } from './heading-review.mjs';
 import { createProjectCodexSettings } from './project-codex-settings.mjs';
+import { createProjectAgent } from './project-agent.mjs';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspace = path.resolve(appRoot, '..');
@@ -161,6 +162,7 @@ export function createReviewApp(options = {}) {
   const roleAnnotations = createRoleAnnotationStore({ db, reviewId, source, roleStore, now, fail });
   readingStore = createReadingStore({ db, reviewId, source, roleStore, now, fail, onChange: pages => headingStore?.invalidatePages(pages) });
   headingStore = createHeadingStore({ db, reviewId, source, roleStore, readingStore, now, fail });
+  const projectAgent = createProjectAgent({ db, reviewId, source, roleStore, roleAnnotations, headingStore, snapshot, now, fail, assertInputUnchanged, resolveSettings: () => codexSettings.resolve(), runner: options.projectAgentRunner, cwd: workspace });
   const baseline = new Map([jsonPath, rulePath].map(file => [file, statSync(file)]));
   function assertInputUnchanged() {
     for (const [file, previous] of baseline) {
@@ -267,6 +269,16 @@ export function createReviewApp(options = {}) {
       }
       if (req.method === 'GET' && pathname === '/api/document') { assertInputUnchanged(); return send(res, 200, { ...source.metadata, sourceHash: source.sourceHash, ruleHash: source.ruleHash, pages: source.pages, storageFile: path.relative(workspace, dbPath).replaceAll('\\', '/') }); }
       if (req.method === 'GET' && pathname === '/api/review') { assertInputUnchanged(); return send(res, 200, snapshot()); }
+      if (pathname === '/api/project/agent') {
+        assertInputUnchanged();
+        if (req.method === 'GET') { const params = new URL(req.url, 'http://localhost').searchParams; return send(res, 200, projectAgent.view(Number(params.get('offset') ?? 0), params.get('conversationId'))); }
+        if (req.method === 'POST') return send(res, 202, projectAgent.start(await bodyOf(req)));
+        if (req.method === 'DELETE') return send(res, 200, await projectAgent.cancel(await bodyOf(req)));
+        throw new RequestError(405, '지원하지 않는 프로젝트 대화 요청입니다.');
+      }
+      if (pathname === '/api/project/agent/new' && req.method === 'POST') return send(res, 200, projectAgent.newConversation(await bodyOf(req)));
+      if (pathname === '/api/project/agent/item' && req.method === 'GET') { assertInputUnchanged(); return send(res, 200, projectAgent.location(new URL(req.url, 'http://localhost').searchParams.get('ref'))); }
+      if (pathname === '/api/review/agent-proposal' && req.method === 'PUT') { const body = await bodyOf(req); return send(res, 200, mutate(body, () => projectAgent.save(body))); }
       if (req.method === 'GET' && ['/api/heading-models', '/api/role-models'].includes(pathname)) {
         try { return send(res, 200, { models: await (pathname === '/api/role-models' ? options.roleModelRunner ?? listHeadingModels : options.headingModelRunner ?? listHeadingModels)({ cwd: workspace }) }); } catch (error) { throw new RequestError(503, error.message); }
       }
@@ -469,6 +481,7 @@ export function createReviewApp(options = {}) {
     }
   });
   return { server, dbPath, source, close: async () => {
+    await projectAgent.close();
     await codexSettings.close();
     annotationController?.abort(); await annotationTask;
     headingController?.abort(); await headingTask;

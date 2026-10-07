@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "start": "node server/main.mjs",
     "dev": "npm run build && npm start",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test --test-concurrency=4 tests/*.test.mjs",
     "test:browser": "node tests/browser.mjs",
     "test:codex": "node scripts/check-codex.mjs"
   },

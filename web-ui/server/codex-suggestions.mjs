@@ -73,7 +73,7 @@ function promptFor(pages) {
 }
 
 // Each run owns its process and ephemeral thread; nothing is written to the review DB.
-export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutMs: overrideTimeout, selectedModel, selectedEffort, catalogue = false, taskPrompt, taskSchema, taskInstructions, validateOutput, maxInputBytes = 1024 * 1024 } = {}) {
+export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutMs: overrideTimeout, selectedModel, selectedEffort, catalogue = false, taskPrompt, taskSchema, taskInstructions, validateOutput, maxInputBytes = 1024 * 1024, conversation } = {}) {
   const prompt = taskPrompt ?? (catalogue ? '' : promptFor(pages));
   if (Buffer.byteLength(prompt, 'utf8') > maxInputBytes) throw new Error(`문서의 추천 입력이 ${maxInputBytes / 1024 / 1024} MiB를 넘습니다. 현재 연결의 입력 한도를 초과했습니다.`);
   const inputChars = inputCharacterCount(prompt);
@@ -82,7 +82,7 @@ export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutM
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) throw new Error('CANDOC_CODEX_TIMEOUT_MS는 1,000~600,000 사이의 정수여야 합니다.');
   if (signal?.aborted) throw new Error('추천을 취소했습니다.');
   const command = launch ?? { executable: executablePath(), args: ['app-server', '--listen', 'stdio://'] };
-  const child = spawn(command.executable, command.args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  const child = spawn(command.executable, command.args, { cwd, env: command.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
   const lines = readline.createInterface({ input: child.stdout });
   const pending = new Map();
   let nextId = 0, failure, threadId, turnId, finalText, exited = false, turnSettled = false;
@@ -108,7 +108,14 @@ export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutM
   lines.on('line', line => {
     let message;
     try { message = JSON.parse(line); } catch { fail(new Error('Codex 프로토콜 응답을 읽을 수 없습니다. 설치 버전을 확인하세요.')); return; }
-    if (message.id !== undefined && message.method) { send({ id: message.id, error: { code: -32601, message: 'This client does not accept tool or approval requests.' } }); return; }
+    if (message.id !== undefined && message.method) {
+      if (conversation && message.method === 'item/tool/call' && paramsForTool(message.params)) {
+        void Promise.resolve().then(() => conversation.callTool(message.params.tool, message.params.arguments)).then(value => {
+          if (!failure) send({ id: message.id, result: { success: true, contentItems: [{ type: 'inputText', text: JSON.stringify(value) }] } });
+        }, error => { if (!failure) send({ id: message.id, result: { success: false, contentItems: [{ type: 'inputText', text: error.message }] } }); });
+      } else send({ id: message.id, error: { code: -32601, message: 'This client does not accept this tool or approval request.' } });
+      return;
+    }
     if (message.id !== undefined) {
       const item = pending.get(message.id);
       if (item) { pending.delete(message.id); message.error ? item.reject(rpcError(item.method, message.error)) : item.resolve(message.result); }
@@ -125,6 +132,9 @@ export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutM
       turnSettled = true; resolveTurn(finalText);
     }
   });
+  function paramsForTool(params) {
+    return params && params.threadId === threadId && typeof params.turnId === 'string' && (!turnId || params.turnId === turnId) && !params.namespace && conversation.tools.some(tool => tool.name === params.tool) && !failure;
+  }
   const interrupt = () => {
     if (threadId && turnId) send({ id: ++nextId, method: 'turn/interrupt', params: { threadId, turnId } });
     fail(new Error('추천을 취소했습니다.'));
@@ -133,7 +143,7 @@ export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutM
   if (signal?.aborted) interrupt();
   const timer = setTimeout(() => fail(new Error('Codex 추천 제한 시간이 지났습니다. 다시 추천을 요청하세요.')), timeoutMs);
   try {
-    await request('initialize', { clientInfo: { name: 'candoc', title: 'CanDoc page selection', version: '0.1.0' } });
+    await request('initialize', { clientInfo: { name: 'candoc', title: conversation ? 'CanDoc project review' : 'CanDoc page selection', version: '0.1.0' }, ...(conversation ? { capabilities: { experimentalApi: true } } : {}) });
     send({ method: 'initialized', params: {} });
     const account = await request('account/read', { refreshToken: false });
     if (!account.account && account.requiresOpenaiAuth) throw new Error('Codex에 로그인되어 있지 않습니다. codex login으로 로그인한 뒤 다시 추천하세요.');
@@ -147,13 +157,19 @@ export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutM
     if (selectedEffort && !model.supportedReasoningEfforts?.some(item => item.reasoningEffort === selectedEffort)) throw new Error('선택한 모델이 지원하지 않는 Reasoning effort입니다.');
     const settings = await request('config/read', { includeLayers: false });
     const config = { 'features.apps': false, 'features.plugins': false, 'features.multi_agent': false };
+    if (conversation) Object.assign(config, { 'features.shell_tool': false, 'features.unified_exec': false, 'features.apply_patch_freeform': false, 'features.code_mode': false, 'features.code_mode_host': false, web_search: 'disabled' });
     for (const name of Object.keys(settings.config?.mcp_servers ?? {})) config[`mcp_servers.${name}.enabled`] = false;
-    const thread = await request('thread/start', { cwd, model: model.model, sandbox: 'read-only', approvalPolicy: 'never', ephemeral: true, config, developerInstructions: taskInstructions ?? instructions });
+    const shared = { cwd, model: model.model, sandbox: 'read-only', approvalPolicy: 'never', config, developerInstructions: taskInstructions ?? instructions };
+    const thread = conversation?.threadId
+      ? await request('thread/resume', { ...shared, threadId: conversation.threadId, excludeTurns: true })
+      : await request('thread/start', { ...shared, ephemeral: !conversation, ...(conversation ? { dynamicTools: conversation.tools } : {}) });
     threadId = thread.thread.id;
+    if (conversation) { if (conversation.threadId && threadId !== conversation.threadId) throw new Error('프로젝트 대화 ID가 일치하지 않습니다.'); conversation.onThread(threadId); }
     const effort = selectedEffort ?? (model.supportedReasoningEfforts?.some(item => item.reasoningEffort === 'low') ? 'low' : model.defaultReasoningEffort);
-    const turn = await request('turn/start', { threadId, input: [{ type: 'text', text: prompt }], outputSchema: taskSchema ?? suggestionSchema, ...(effort ? { effort } : {}) });
+    const turn = await request('turn/start', { threadId, input: [{ type: 'text', text: prompt }], ...(!conversation ? { outputSchema: taskSchema ?? suggestionSchema } : {}), ...(effort ? { effort } : {}) });
     turnId ??= turn.turn.id;
     const text = await finished;
+    if (conversation) return text;
     let result;
     try { result = JSON.parse(text); } catch { throw new Error('Codex의 최종 답변이 JSON 형식이 아닙니다. 다시 추천을 요청하세요.'); }
     return validateOutput ? validateOutput(result) : validateSuggestions(result, pages.map(page => page.page));
