@@ -29,6 +29,7 @@ lines.on('line', line => {
   if (msg.method === 'turn/interrupt') { result(msg.id, {}); return; }
   assert.equal(msg.method, 'turn/start');
   assert.ok(msg.params.outputSchema.properties.suggestions); if (mode === 'heading') assert.equal(msg.params.effort, 'medium');
+  if (mode === 'rpc-size-error' || mode === 'rpc-invalid') return send({id:msg.id,error:{code:-32602,message:'PRIVATE prompt and account details must not leak',data:mode==='rpc-size-error'?{input_error_code:'input_too_large',max_chars:1048576,actual_chars:2221003}:{secret:'must not leak'}}});
   result(msg.id, { turn: { id: 'turn-test' } });
   send({ method: 'turn/started', params: { threadId: 'thread-test', turn: { id: 'turn-test' } } });
   send({ method: 'item/completed', params: { threadId: 'thread-test', turnId: 'turn-test', item: { type: 'agentMessage', phase: 'commentary', text: '{"suggestions":[{"pages":[999],"reason":"중간 답변"}]}' } } });

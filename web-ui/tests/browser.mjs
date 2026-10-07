@@ -434,6 +434,7 @@ try {
   await checkRoleUI(browser);
   await (await import('./role-questions-browser.mjs')).checkRoleQuestionsUI(browser);
   const annotations = await import('./role-annotations-browser.mjs'); await annotations.checkRoleAnnotationsUI(browser); await annotations.checkActualAnnotationLayout(browser);
+  await (await import('./annotation-input-browser.mjs')).checkActualAnnotationInputUI(browser);
   await checkActualRoleLayout(browser);
   await checkReadingUI(browser);
   await checkActualReadingLayout(browser);

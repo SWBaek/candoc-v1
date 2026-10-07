@@ -3,6 +3,18 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 
+// Confirmed in installed app-server 0.160.1: Unicode scalar values, not UTF-8
+// bytes or UTF-16 code units. Task-specific byte limits remain independent.
+export const codexMaxInputChars = 1048576;
+export function inputCharacterCount(text) { let count = 0; for (const _ of text) count++; return count; }
+function rpcError(method, error) {
+  const code = Number.isSafeInteger(error?.code) ? error.code : '알 수 없음';
+  const data = error?.data;
+  if (data?.input_error_code === 'input_too_large' && Number.isSafeInteger(data.max_chars) && data.max_chars > 0 && Number.isSafeInteger(data.actual_chars) && data.actual_chars >= 0) return new Error(`Codex ${method} 입력이 제한을 넘습니다 (${code}). ${data.actual_chars.toLocaleString('ko-KR')}자 / 최대 ${data.max_chars.toLocaleString('ko-KR')}자. 원문을 자르지 않고 요청을 중단했습니다.`);
+  // Never expose arbitrary server diagnostics, account data or echoed prompts.
+  return new Error(`Codex ${method} 요청이 실패했습니다 (${code}). ${code === -32602 ? '요청 형식과 입력 크기·모델 설정을 확인하세요.' : '로그인·모델·설정 상태를 확인하세요.'}`);
+}
+
 export const suggestionSchema = {
   type: 'object', additionalProperties: false, required: ['suggestions'],
   properties: { suggestions: { type: 'array', items: {
@@ -64,6 +76,8 @@ function promptFor(pages) {
 export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutMs: overrideTimeout, selectedModel, selectedEffort, catalogue = false, taskPrompt, taskSchema, taskInstructions, validateOutput, maxInputBytes = 1024 * 1024 } = {}) {
   const prompt = taskPrompt ?? (catalogue ? '' : promptFor(pages));
   if (Buffer.byteLength(prompt, 'utf8') > maxInputBytes) throw new Error(`문서의 추천 입력이 ${maxInputBytes / 1024 / 1024} MiB를 넘습니다. 현재 연결의 입력 한도를 초과했습니다.`);
+  const inputChars = inputCharacterCount(prompt);
+  if (inputChars > codexMaxInputChars) throw new Error(`Codex 입력이 제한을 넘습니다. ${inputChars.toLocaleString('ko-KR')}자 / 최대 ${codexMaxInputChars.toLocaleString('ko-KR')}자. 원문을 자르지 않고 요청을 중단했습니다.`);
   const timeoutMs = Number(overrideTimeout ?? process.env.CANDOC_CODEX_TIMEOUT_MS ?? 240000);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) throw new Error('CANDOC_CODEX_TIMEOUT_MS는 1,000~600,000 사이의 정수여야 합니다.');
   if (signal?.aborted) throw new Error('추천을 취소했습니다.');
@@ -85,7 +99,7 @@ export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutM
   function send(message) { if (!exited && !child.stdin.destroyed) child.stdin.write(JSON.stringify(message) + '\n'); }
   function request(method, params) {
     if (failure) return Promise.reject(failure);
-    return new Promise((resolve, reject) => { const id = ++nextId; pending.set(id, { resolve, reject }); send({ id, method, params }); });
+    return new Promise((resolve, reject) => { const id = ++nextId; pending.set(id, { resolve, reject, method }); send({ id, method, params }); });
   }
   child.stdin.on('error', () => fail(new Error('Codex 연결이 닫혔습니다. 다시 추천을 요청하세요.')));
   child.on('error', () => fail(new Error('Codex 실행 파일을 시작할 수 없습니다. 설치 상태와 CANDOC_CODEX_EXECUTABLE을 확인하세요.')));
@@ -97,7 +111,7 @@ export async function runCodexSuggestions({ pages, cwd, signal, launch, timeoutM
     if (message.id !== undefined && message.method) { send({ id: message.id, error: { code: -32601, message: 'This client does not accept tool or approval requests.' } }); return; }
     if (message.id !== undefined) {
       const item = pending.get(message.id);
-      if (item) { pending.delete(message.id); message.error ? item.reject(new Error(`Codex 요청이 실패했습니다 (${message.error.code}). 로그인·모델·설정 상태를 확인하세요.`)) : item.resolve(message.result); }
+      if (item) { pending.delete(message.id); message.error ? item.reject(rpcError(item.method, message.error)) : item.resolve(message.result); }
       return;
     }
     const params = message.params;
