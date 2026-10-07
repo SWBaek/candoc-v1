@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Icon } from './icon';
 import { HeadingSuggestions } from './heading-suggestions';
+import { useProjectAgent } from './project-agent';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,6 +20,7 @@ type Props = { document: DocumentInfo; review: Review; busy: boolean; onDirty: (
 function headingOf(row: HeadingDraft): HeadingDraft { const { ref, status, reason, followUp, evidence, isHeading, level, parentRef, sectionNumber, part, position } = row; return { ref, status, reason, followUp, evidence, isHeading, level, parentRef, sectionNumber, part, position }; }
 function pageOf(row: OutlinePageDraft): OutlinePageDraft { const { page, status, reason, followUp, evidence, part, checkedAllText, issues, range } = row; return { page, status, reason, followUp, evidence, part, checkedAllText, issues, ...(range ? { range } : {}) }; }
 export const HeadingReview = forwardRef<RoleReviewHandle, Props>(function HeadingReview({ document, review, busy, onDirty, onNavigate, onMutate, onEnlarge, stageNote, onNote, stageDirty, onStage }, ref) {
+  const projectAgent = useProjectAgent();
   const [data, setData] = useState<HeadingContext | null>(null), [problem, setProblem] = useState(''), [notice, setNotice] = useState('');
   const [draft, setDraft] = useState<State>({ heads: {}, pages: {}, forced: [], forcedPages: [] }), [baseline, setBaseline] = useState<State>({ heads: {}, pages: {}, forced: [], forcedPages: [] }), [history, setHistory] = useState<State[]>([]);
   const initialized = useRef(false), rowsRef = useRef(new Map<string, HTMLDivElement>()), additive = useRef(false), toolsRef = useRef<HTMLDetailsElement>(null);
@@ -30,6 +32,7 @@ export const HeadingReview = forwardRef<RoleReviewHandle, Props>(function Headin
     return () => window.removeEventListener('pointerdown', close);
   }, [toolsOpen]);
   const [mode, setMode] = useState<'tree' | 'missing' | 'pages'>('tree'), [query, setQuery] = useState(''), [focused, setFocused] = useState(''), [selected, setSelected] = useState<Set<string>>(new Set()), [collapsed, setCollapsed] = useState<Set<string>>(new Set()), [editMode, setEditMode] = useState(false), [suspectOnly, setSuspectOnly] = useState(false), [manual, setManual] = useState<Set<string>>(new Set());
+  useEffect(() => { projectAgent.select({ stage: 5, refs: focused ? [focused, ...[...selected].filter(ref => ref !== focused)] : [...selected] }); }, [focused, selected, projectAgent.select]);
   const [exceptions, setExceptions] = useState<Set<string>>(new Set()), [includeChildren, setIncludeChildren] = useState(true), [inspectorOpen, setInspectorOpen] = useState(false), [sourceOpen, setSourceOpen] = useState(false), [rangeSourceOpen, setRangeSourceOpen] = useState(false), [sourcePage, setSourcePage] = useState(0);
   const [bulk, setBulk] = useState({ ...common(), isHeading: 'keep', part: 'body' as DocumentPart, level: '' });
   const [from, setFrom] = useState(1), [to, setTo] = useState(document.pageCount), [pageExceptions, setPageExceptions] = useState<Set<number>>(new Set()), [pageCommon, setPageCommon] = useState<OutlinePageDraft>(blankPage(0));

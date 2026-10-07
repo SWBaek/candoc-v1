@@ -49,7 +49,7 @@ export async function checkRoleAnnotationsUI(browser) {
     assert.deepEqual((await state()).roleReviews, before.roleReviews);
     assert.deepEqual((await annotations()).annotations[0].matches.map(row => row.ref), ['#/texts/9', '#/texts/10', '#/texts/11']);
     await configureProjectModel(page);
-    await panel.getByRole('button', { name: '이 주석으로 Agent에 요청', exact: true }).click(); await expect(page.getByLabel('영역 추천 묶음', { exact: true })).toBeVisible(); assert.deepEqual((await state()).roleReviews, before.roleReviews);
+    await panel.locator('.legacy-annotation-request > summary').click(); await panel.getByRole('button', { name: '이 주석으로 Agent에 요청', exact: true }).click(); await expect(page.getByLabel('영역 추천 묶음', { exact: true })).toBeVisible(); assert.deepEqual((await state()).roleReviews, before.roleReviews);
     await panel.getByText('대상·변경 전후·예외 확인', { exact: true }).click();
     await page.getByLabel('#/texts/2 영역 추천 대상', { exact: true }).uncheck();
     const target = panel.locator('.role-annotation-target').filter({ has: page.getByLabel('#/texts/1 영역 추천 대상', { exact: true }) }); await target.getByRole('button', { name: '원본 위치', exact: true }).click();

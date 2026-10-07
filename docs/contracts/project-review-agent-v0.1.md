@@ -37,4 +37,4 @@ SQLite `project_agent_conversations`는 검수 세션/원본/규칙/도구 계�
 
 Codex는 read-only/approvalPolicy never이며 MCP/apps/plugins/multi-agent/shell/unified exec/code mode/web search를 비활성화한다. 호스트는 현재 thread/turn의 두 등록 dynamic tools만 응답하고 알 수 없는 도구/승인 요청을 거부한다. 문서 원문은 지시가 아닌 자료로 다룬다. 원본 수정, 실제 사용자 DB 테스트 쓰기, 기존 서버 제어는 하지 않는다. 교정된 DoclingDocument 사본 생성은 이번 구현에 포함되지 않으며 공식 스키마/HTML 교정 완료를 주장하지 않는다.
 
-프로토콜 근거: [Codex App Server](https://learn.chatgpt.com/docs/app-server)의 thread/resume 및 experimental dynamic tools와 설치된 Codex 0.160.1 생성 스키마. 검증은 임시 DB/별도 포트/빌드/합성 stdio, 설치 binary는 로컬 실패 HTTP 공급자에만 연결한다. 실제 모델의 도구 호출/추천 품질은 사용자 실 요청과 구분한다.
+프로토콜 근거: [Codex App Server](https://learn.chatgpt.com/docs/app-server)의 thread/resume 및 experimental dynamic tools와 설치된 Codex 0.160.1 생성 스키마. 검증은 임시 DB/별도 포트/빌드/합성 stdio를 사용한다. `npm run test:agent-protocol`은 별도 CODEX_HOME과 localhost 합성 SSE 공급자로 설치 binary의 같은 thread 복구와 등록 도구 호출 2회를 확인한다. 외부 추론은 실행하지 않으므로 실제 모델의 자율 도구 선택·추천 품질은 미검증이다.

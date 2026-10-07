@@ -25,11 +25,11 @@ export async function checkActualAnnotationInputUI(browser) {
     const response=await fetch(url+'/api/review/role-annotations',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:review.revision,sourceHash:source.sourceHash,ruleHash:source.ruleHash,page:17,rect:{left:.14,top:.045,width:.73,height:.04},comment:'같은 머리말을 찾아줘'})}); assert.equal(response.status,200);
     await page.goto(url);await page.locator('[data-stage-id="3"]').click();await page.getByLabel('영역 검수 보기',{exact:true}).selectOption('annotate');await page.getByRole('button',{name:'주석·AI 응답',exact:true}).click();
     await configureProjectModel(page); const before=await state();
-    const request=page.getByRole('button',{name:'이 주석으로 Agent에 요청',exact:true});await request.click();
+    await page.locator('.legacy-annotation-request > summary').click(); const request=page.getByRole('button',{name:'이 주석으로 Agent에 요청',exact:true});await request.click();
     await expect(page.locator('.role-annotation-thread [role="alert"]')).toContainText('turn/start'); await expect(page.locator('.role-annotation-thread [role="alert"]')).toContainText('2,221,003자 / 최대 1,048,576자');
     assert.ok(!(await page.locator('.role-annotation-thread').textContent()).includes('PRIVATE'));assert.deepEqual(await state(),before);
     await page.reload();await page.getByLabel('영역 검수 보기',{exact:true}).selectOption('annotate');await page.getByRole('button',{name:'주석·AI 응답',exact:true}).click();await expect(page.locator('.role-annotation-thread [role="alert"]')).toContainText('1,048,576자');
-    await request.click();await expect(page.locator('.role-annotation-thread')).toContainText('추천 대상이 없습니다. 검수 완료나 오류 없음 판정은 아닙니다.');
+    await page.locator('.legacy-annotation-request > summary').click(); await request.click();await expect(page.locator('.role-annotation-thread')).toContainText('추천 대상이 없습니다. 검수 완료나 오류 없음 판정은 아닙니다.');
     const context=await get('/api/role-annotations');assert.equal(context.jobs[0].status,'completed');assert.equal(context.jobs[1].status,'failed');assert.equal(context.annotations.length,1);assert.equal(requests,2);assert.deepEqual(await state(),before);assert.deepEqual(errors,[]);assert.deepEqual(await readFile(fixtureJson),bytes);
     await page.screenshot({path:'qa/annotation-input-actual-1512.png'});
     console.log('Actual annotation input browser passed: complete real document packet under engine limit, safe size/RPC error, failed job reload and explicit retry, retained annotation and unchanged judgments; synthetic provider only.');

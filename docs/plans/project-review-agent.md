@@ -13,3 +13,15 @@
 ## 검증과 경계
 
 원본/실제 DB/기존 dist 및 기존 서버를 보존하고 전후 읽기 전용 snapshot을 비교한다. 모든 테스트는 synthetic/copied 임시 DB, 자체 포트, 별도 CANDOC_BUILD_DIR=qa/project-agent-dist를 쓴다. 실제 모델 호출/원격 push/배포/새 외부 Agent/원본 수정은 하지 않는다. 원문 프롬프트 인젝션, 알 수 없는 도구/refs, 조회하지 않은 refs, 범위 밖/예외/원자 실패/충돌/취소/재시작 복구를 합성 프로토콜과 API로 확인한다. 실제 UI 대화 연속성/첨부/원문 이동/미저장 보호/승인 전후/다중 대상 및 모바일 focus/두 테마 캡처와 기존 전체 회귀, 타입, 격리 빌드를 수행한다. 단계별 로컬 커밋 후 결과와 실제 추론 미검증 한계를 보고한다.
+
+## 구현 결과와 검증 — 2026-10-07
+
+- `npm test`: API/저장/프로토콜 전체 81/81 통과. 프로젝트 Agent 7개 테스트에서 조회 범위·모든 prov·제외/예외·원자 rollback·충돌·취소·진행 중 판단 변경·프로세스 재시작을 검증했다. 테스트 동시 실행은 4개로 제한해 합성 하위 프로세스 간 자원 경쟁을 줄였다.
+- `npm run typecheck` 및 `CANDOC_BUILD_DIR=qa/project-agent-dist` 격리 빌드 통과. `npm run test:browser` 전체 페이지/AI/3/4/5 회귀와 신규 프로젝트 Agent UI 통과. 주석 drag→첨부→조회→예외→승인(쓰기 없음)→명시 저장→새로고침→복원과 실제 하위 서버 프로세스 재시작, 요청 중 강제 종료 후 중단 이력 복구를 확인했다. 기존 사용자 서버는 제어하지 않았다.
+- 실제 IEEE 문서의 원본 17페이지 PNG/bbox/JSON과 공통 대화·첨부를 확인했다. light/dark 각각 1512/1024/375/320px의 합성·실제 화면을 캡처했고, 가로 넘침 없음·44px 주요 조작·텍스트 대비 4.5 이상·모바일 포커스 제한/Escape/복귀를 검사했다. 대화의 현재 페이지는 실제 열린 원본 페이지와 동기화하며 첨부 시 해당 페이지로 이동한다.
+- `npm run test:agent-protocol`: 설치된 Codex 0.160.1에서 같은 thread resume, 호스트 도구 호출 2회, localhost 합성 HTTP 요청 4회 통과. 별도 CODEX_HOME/작업폴더/공급자만 사용했으며 외부 모델 추론은 실행하지 않았다. 합성 결과를 실제 추천 품질의 근거로 삼지 않는다.
+- 읽기 전용 전후 비교에서 원본 168개 파일, 실제 DB의 6개 테이블 스키마/행, 기존 static 9개 파일, 실제 검수 revision 47과 서버 메모리 추천 상태가 동일했다. 기존 포트 4380/4382/4383 및 3696/1528/3419의 PID를 유지했다.
+
+검증 로그는 `web-ui/qa/project-agent-api.log`, `project-agent-browser.log`에 있고 대표 화면은 `web-ui/qa/project-agent-actual-chat-1512.png`, `project-agent-actual-light-375.png`이다. QA 산출물/DB/원본은 Git 추적 대상에 추가하지 않는다.
+
+별도 미리보기는 `http://127.0.0.1:8719`이며, 이전 격리 미리보기 DB를 복사한 `web-ui/qa/project-agent-preview-20261007/review.sqlite`와 별도 빌드만 사용한다. 실제 사용자 검수 DB와 기록을 공유하지 않는다. 이번 변경은 검수 기록 저장까지이며 교정된 DoclingDocument 사본을 만들지 않았다. 반복 요소 외의 페이지 제외/제목 구조 저장은 기존 경로를 유지한다. 실제 모델의 자율 조회·추천 품질과 experimental dynamic tools의 향후 버전 호환성은 남은 제한이다.

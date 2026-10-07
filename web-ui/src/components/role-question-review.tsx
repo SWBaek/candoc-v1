@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { RoleReview as RoleDetails, type RoleReviewProps, type RoleReviewHandle } from './role-review';
 import { RoleAnnotations } from './role-annotations';
+import { useProjectAgent } from './project-agent';
 import type { DocumentInfo, RoleElement, RoleQuestionContext } from '@/types';
 export type { RoleReviewHandle } from './role-review';
 const roles: Record<string, string> = { header: '머리말', footer: '꼬리말', page_number: '페이지 번호', caption: '캡션', body: '본문', title: '제목', footnote: '각주', table: '표', picture: '그림', list: '목록', formula: '수식', other: '기타', unknown: '미확정' };
@@ -26,6 +27,7 @@ function Source({ item, document, onEnlarge, context = [], preferredPage, active
   </article>;
 }
 export const RoleReview = forwardRef<RoleReviewHandle, RoleReviewProps>(function RoleReview(props, ref) {
+  const projectAgent = useProjectAgent();
   const { document, review, busy, onDirty, onNavigate, onMutate, onEnlarge, stageNote, onNote, stageDirty, onStage } = props;
   const [data, setData] = useState<{ items: RoleElement[]; context: RoleQuestionContext } | null>(null), [error, setError] = useState('');
   const [view, setView] = useState<'questions' | 'pages' | 'direct' | 'annotate'>('questions'), [questionId, setQuestionId] = useState(''), [pageNo, setPageNo] = useState(0), [activeRef, setActiveRef] = useState('');
@@ -50,6 +52,10 @@ export const RoleReview = forwardRef<RoleReviewHandle, RoleReviewProps>(function
     } catch (error) { setError((error as Error).message); }
   }
   useEffect(() => { void load(); }, [document.sourceHash, document.ruleHash, review.revision]);
+  useEffect(() => {
+    const handler = (event: Event) => { const target = (event as CustomEvent<{ ref: string; page: number }>).detail; if (!data?.items.some(item => item.ref === target.ref) || !document.pages.some(page => page.number === target.page)) return; setPageNo(target.page); setActiveRef(target.ref); setView('annotate'); };
+    globalThis.addEventListener('candoc-agent-locate', handler); return () => globalThis.removeEventListener('candoc-agent-locate', handler);
+  }, [data?.items, document.pages]);
   // A context refresh (including conflicts) must not erase pending responses.
   useEffect(() => {
     if (!data || view === 'direct' || view === 'annotate') return;
@@ -57,6 +63,7 @@ export const RoleReview = forwardRef<RoleReviewHandle, RoleReviewProps>(function
     setSelected(next); setBaseline(next); setActiveRef(next[0] ?? refs[0] ?? ''); setAction(''); setReason(''); setChecked(false); setImageChecked(false);
   }, [questionId, pageNo, view]);
   useEffect(() => { if (view !== 'direct' && view !== 'annotate') onDirty(dirty, valid); }, [dirty, valid, view]);
+  useEffect(() => { if (view !== 'direct' && view !== 'annotate') projectAgent.select({ stage: 3, refs: activeRef ? [activeRef, ...selected.filter(ref => ref !== activeRef)] : selected }); }, [view, activeRef, selected, projectAgent.select]);
   useEffect(() => () => onDirty(false, false), []);
   function discard() { if (view === 'annotate') { annotations.current?.discard(); return; } if (view === 'direct') { direct.current?.discard(); return; } setSelected(baseline); setAction(''); setReason(''); setChecked(false); setImageChecked(false); onDirty(false, false); }
   async function save() {
@@ -81,7 +88,7 @@ export const RoleReview = forwardRef<RoleReviewHandle, RoleReviewProps>(function
   return <section className="role-review role-questions" aria-label="영역 질문 검수">
     <div className="role-toolbar"><select aria-label="영역 검수 보기" value={view} disabled={busy} onChange={event => navigate(() => { setDirectGroupId(view === 'questions' ? question?.groupId : undefined); setView(event.target.value as typeof view); })}><option value="questions">확인할 질문 · {data.context.questions.filter(q => q.open).length} / {data.context.questions.length}묶음</option><option value="annotate">원본에 표시·Agent 요청</option><option value="pages">페이지별 훑어보기</option><option value="direct">직접 수정</option></select><span className="role-scope-note">전체 범위 {scope.total}개 · 확인 기록 {scope.reviewed} · 미검수 {scope.unreviewed} · 재검토 {scope.needsReview}</span></div>
     {error && <p role="alert">{error}</p>}
-    {view === 'annotate' ? <RoleAnnotations {...props} ref={annotations} items={data.items} initialPage={active ? preferred(active) ?? pageNo : pageNo} /> : view === 'direct' ? <RoleDetails {...props} ref={direct} questionHold={deferred} initialRef={activeRef} initialGroupId={directGroupId} /> : <>
+    {view === 'annotate' ? <RoleAnnotations {...props} ref={annotations} items={data.items} initialPage={active ? active.pages.includes(pageNo) ? pageNo : preferred(active) ?? pageNo : pageNo} initialRef={activeRef} /> : view === 'direct' ? <RoleDetails {...props} ref={direct} questionHold={deferred} initialRef={activeRef} initialGroupId={directGroupId} /> : <>
       {view === 'questions' ? question ? <>
         <select aria-label="검수 질문 선택" value={questionId} disabled={busy} onChange={event => navigate(() => setQuestionId(event.target.value))}>{data.context.questions.map(q => <option key={q.id} value={q.id}>{!q.targets.length ? '페이지 선별에서 제외됨' : q.open ? `남음 ${q.open}개` : '응답됨'} · {q.title}</option>)}</select>
         <div className="role-question-heading"><h2>{question.title}</h2><p className="role-scope-note">{question.reason}</p><p className="role-question-range">전체 {refs.length}개 · 범위 내 {eligible.length}개 · 선택 {selected.length}개 · 예외 {Math.max(0, eligible.length - selected.filter(ref => eligible.includes(ref)).length)}개 · 페이지 선별에서 제외됨 {refs.length - eligible.length}개</p>

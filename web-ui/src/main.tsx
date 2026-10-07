@@ -10,6 +10,7 @@ import { RoleReview, type RoleReviewHandle } from '@/components/role-question-re
 import { HeadingReview } from '@/components/heading-review';
 import { ReadingReview } from '@/components/reading-review';
 import { ProjectCodexProvider, useProjectCodex } from '@/components/project-codex-settings';
+import { ProjectAgentPanel, ProjectAgentProvider, useProjectAgent } from '@/components/project-agent';
 import type { DecisionStatus, DocumentInfo, ElementInfo, Evidence, PageDecision, PageInfo, PageSuggestion, Review, Stage } from './types';
 
 const labels: Record<DecisionStatus, string> = { unreviewed: '미검수', included: '포함', excluded: '제외', pending: '보류' };
@@ -41,6 +42,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 function App() {
   const { openSettings } = useProjectCodex();
+  const projectAgent = useProjectAgent();
   const [document, setDocument] = useState<DocumentInfo | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const reviewRef = useRef<Review | null>(null);
@@ -82,15 +84,18 @@ function App() {
     try {
       const [doc, state] = await Promise.all([request<DocumentInfo>('/api/document'), request<Review>('/api/review')]);
       setDocument(doc); receive(state); setError(''); setQuery('');
+      projectAgent.setOpen(localStorage.getItem(`candoc-project-agent:${doc.sourceHash}`) === 'open');
       const preference = localStorage.getItem(`candoc-side-panel:${doc.sourceHash}`);
       setSidePanel(preference === 'ai' ? 'ai' : preference === 'none' ? 'none' : state.panelVisible ? 'detail' : 'none');
     } catch (e) { setError((e as Error).message); }
   }
   function receive(state: Review) { reviewRef.current = state; setReview(state); }
   function choosePanel(panel: 'none' | 'ai' | 'detail') {
+    if (panel !== 'none') projectAgent.setOpen(false);
     setSidePanel(panel);
     if (document) localStorage.setItem(`candoc-side-panel:${document.sourceHash}`, panel);
   }
+  useEffect(() => { if (projectAgent.open) setSidePanel('none'); }, [projectAgent.open]);
   function toggleDetailPanel() {
     const opening = sidePanel !== 'detail';
     guard(async () => {
@@ -238,7 +243,7 @@ function App() {
   const pageSelectionReady = counts.unreviewed === 0 && counts.pending === 0;
   const impacts = review.impacts.filter(impact => impact.stage === stage.id);
   const impactedPages = [...new Set(impacts.flatMap(impact => impact.affectedPages))].sort((a, b) => a - b);
-  return <div className="app-shell">
+  return <div className={`app-shell ${projectAgent.open ? 'project-agent-open' : ''}`}>
     <aside className="sidebar" aria-label="검수 과정" data-expanded={processExpanded}>
       <div className="wordmark"><span className="brand-mark">C</span><span>CanDoc</span><Button size="sm" variant="ghost" className="process-toggle" aria-expanded={processExpanded} aria-controls="review-process" onClick={() => setProcessExpanded(!processExpanded)}>{processExpanded ? '검수 과정 접기' : '검수 과정 보기'}<Icon name="chevron" /></Button></div>
       <div className="document-name"><strong>{document.name}</strong><span>{document.pageCount}페이지 · 문서 검수</span></div>
@@ -254,7 +259,7 @@ function App() {
       <div className="sidebar-footer"><Button variant="ghost" className="settings-menu" aria-label="설정" title="프로젝트 설정" onClick={openSettings}><Icon name="settings" /><span className="settings-menu-label">설정</span></Button><div className="theme-switch"><Button size="icon" variant="ghost" aria-label="밝은 테마" aria-pressed={theme === 'light'} onClick={() => setTheme('light')}><Icon name="sun" /></Button><Button size="icon" variant="ghost" aria-label="어두운 테마" aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}><Icon name="moon" /></Button></div></div>
     </aside>
     <main className="main">
-      <header className="topbar"><span className="location-trail"><span className="location-document">{document.name}</span><span className="breadcrumb">/</span>{stage.name}</span><span className={`saved-status ${dirty ? 'save-dirty' : ''}`} role="status" title={new Date(review.updatedAt).toLocaleString('ko-KR')}><i />{busy ? '저장 중…' : dirty ? '저장 전 변경' : '저장됨'}</span></header>
+      <header className="topbar"><span className="location-trail"><span className="location-document">{document.name}</span><span className="breadcrumb">/</span>{stage.name}</span><Button variant="ghost" className="project-agent-open-button" aria-label="프로젝트 Agent 열기" aria-expanded={projectAgent.open} onClick={() => { choosePanel('none'); projectAgent.setOpen(!projectAgent.open); }}><Icon name="chat" /><span>Agent</span></Button><span className={`saved-status ${dirty ? 'save-dirty' : ''}`} role="status" title={new Date(review.updatedAt).toLocaleString('ko-KR')}><i />{busy ? '저장 중…' : dirty ? '저장 전 변경' : '저장됨'}</span></header>
       {error && <div className="error-banner" role="alert"><span>{error}</span><Button variant="outline" size="sm" disabled={busy} onClick={() => guard(load)}>최신 기록 불러오기</Button></div>}
       <div className="workspace">
         <div className="page-heading"><div><h1>{stage.id === 2 ? '불필요한 페이지 선별' : stage.name}</h1><p>{documentInfo ? '불러온 문서의 기본 정보입니다. 검수는 페이지 선별부터 진행하세요.' : stage.id === 2 ? '제외할 페이지만 고르세요. 나머지는 선별 완료 시 유지됩니다.' : stageHints[stage.id]}</p></div>{stage.status === 'completed' && <Badge className="done-badge">검토 완료</Badge>}</div>
@@ -319,7 +324,8 @@ function App() {
     {imagePage && <div className="modal-backdrop"><div className="image-modal" role="dialog" aria-modal="true" aria-labelledby="image-modal-title"><div className="modal-header"><strong id="image-modal-title">원본 {imagePage.number}페이지</strong><Button variant="outline" ref={imageCloseRef} onClick={() => setEnlargedPage(null)}>닫기</Button></div><div className="large-image">{imagePage.imageAvailable ? <img src={imagePage.imageUrl} alt={`원본 ${imagePage.number}페이지 확대 이미지`} /> : <p>이 페이지의 원문 이미지가 없습니다.</p>}</div></div></div>}
     {bulkOpen && <div className="modal-backdrop"><div className="bulk-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-title"><h2 id="bulk-title">선택한 {bulkPages.length}페이지 {labels[bulkDraft.status]}</h2><p className="bulk-page-numbers">원본 페이지: {bulkPages.slice().sort((a, b) => a - b).join(', ')}</p><label className="field-label" htmlFor="bulk-reason">공통 판단 사유{bulkDraft.status === 'excluded' ? ' · 필수' : ' · 선택'}</label><Textarea id="bulk-reason" ref={bulkReasonRef} maxLength={10000} value={bulkDraft.reason} onChange={event => setBulkDraft({ ...bulkDraft, reason: event.target.value })} placeholder={bulkDraft.status === 'excluded' ? '제외 사유와 세부 검수하지 않을 범위' : '포함하거나 제외를 취소하는 판단 근거'} /><label className="field-label" htmlFor="bulk-evidence">사용한 근거</label><select id="bulk-evidence" value={bulkDraft.evidence} onChange={event => setBulkDraft({ ...bulkDraft, evidence: event.target.value as Evidence })}><option value="page_image" disabled={bulkPages.some(number => !document.pages.find(page => page.number === number)?.imageAvailable)}>원문 페이지 이미지</option><option value="json">JSON 내부 근거</option><option value="both" disabled={bulkPages.some(number => !document.pages.find(page => page.number === number)?.imageAvailable)}>페이지 이미지 + JSON</option></select><label className="field-label" htmlFor="bulk-note">공통 검토 메모 · 선택</label><Textarea id="bulk-note" maxLength={10000} value={bulkDraft.note} onChange={event => setBulkDraft({ ...bulkDraft, note: event.target.value })} placeholder="인접 페이지와 연결되는 내용 등 후속 확인 사항" /><p className="panel-footnote">각 페이지에 같은 사유·근거를 기록하며 원본은 보존합니다.</p><div className="prompt-actions"><Button variant="outline" disabled={busy} onClick={() => setBulkOpen(false)}>취소</Button><Button disabled={busy || (bulkDraft.status === 'excluded' && !bulkDraft.reason.trim())} onClick={saveBulk}>{bulkPages.length}페이지 {labels[bulkDraft.status]} 저장</Button></div></div></div>}
     {unsavedPrompt && <div className="modal-backdrop"><div className="unsaved-modal" role="dialog" aria-modal="true" aria-labelledby="unsaved-title"><h2 id="unsaved-title">저장하지 않은 변경이 있습니다.</h2><p>현재 초안을 저장하거나 취소한 뒤 이동할 수 있습니다.</p><div className="prompt-actions"><Button variant="outline" ref={cancelRef} disabled={busy} onClick={() => { pendingAction.current = null; setUnsavedPrompt(false); }}>현재 화면 유지</Button><Button variant="outline" disabled={busy} onClick={() => proceedUnsaved(false)}>초안 취소 후 이동</Button><Button disabled={busy || (pageDirty && !validDraft) || (roleDirty && !roleValid)} onClick={() => proceedUnsaved(true)}>저장 후 이동</Button></div></div></div>}
+    <ProjectAgentPanel document={document} review={review} dirty={dirty} busy={busy} onMutate={mutate} onNavigate={guard} onPage={number => navigate({ selectedPage: number })} />
   </div>;
 }
 
-createRoot(window.document.getElementById('root')!).render(<ProjectCodexProvider><App /></ProjectCodexProvider>);
+createRoot(window.document.getElementById('root')!).render(<ProjectCodexProvider><ProjectAgentProvider><App /></ProjectAgentProvider></ProjectCodexProvider>);

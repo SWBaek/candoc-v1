@@ -494,6 +494,31 @@ h1 { font-size: var(--font-title); line-height: 1.35; font-weight: var(--weight-
 @media (max-width: 600px) { .heading-row-text .heading-depth { display: inline; } }
 
 /* Stage 5 keeps search and navigation above the outline; secondary tools disclose. */
+.project-agent-open-button { margin-left: auto; flex-shrink: 0; }
+.project-agent-panel { position: fixed; inset: 0 0 0 auto; z-index: 18; width: 400px; max-width: 100vw; display: flex; flex-direction: column; background: var(--background); color: var(--foreground); border-left: var(--stroke) solid var(--border); }
+.project-agent-panel .ai-panel-header { flex-shrink: 0; padding: var(--space-3); }
+.project-agent-panel button, .project-agent-panel select { min-height: var(--control-touch); min-width: var(--control-touch); }
+.project-agent-open-button { min-height: var(--control-touch); min-width: var(--control-touch); }
+.project-agent-history { min-height: 0; flex: 1; overflow: auto; padding: 0 var(--space-3); overflow-wrap: anywhere; }
+.project-agent-turn { padding: var(--space-3) 0; border-bottom: var(--stroke) solid var(--border); }
+.project-agent-user { padding: var(--space-2) var(--space-3); background: var(--soft); border-radius: var(--radius-panel); margin-bottom: var(--space-3); }
+.project-agent-turn p, .project-agent-source p { white-space: pre-wrap; margin-bottom: var(--space-2); }
+.project-agent-panel small, .project-agent-empty, .project-agent-evidence { color: var(--muted); font-size: var(--font-caption); }
+.project-agent-proposal { padding: var(--space-3) 0; }
+.project-agent-panel summary { min-height: var(--control-touch); cursor: pointer; display: flex; align-items: center; }
+.project-agent-target { display: flex; gap: var(--space-1); border-bottom: var(--stroke) solid var(--border); padding: var(--space-2) 0; align-items: center; }
+.project-agent-target label { flex: 1; min-width: 0; }
+.project-agent-target small { display: block; }
+.project-agent-target input { min-width: 44px; min-height: 44px; vertical-align: middle; }
+.project-agent-composer { padding: var(--space-3); border-top: var(--stroke) solid var(--border); background: var(--background); flex-shrink: 0; }
+.project-agent-composer textarea { margin: var(--space-2) 0; min-height: 80px; max-height: 160px; }
+.project-agent-attachment { display: flex; align-items: center; justify-content: space-between; }
+.project-agent-source { border-top: var(--stroke) solid var(--border); padding: var(--space-3) 0; }
+.project-agent-source pre { overflow: auto; max-height: 240px; font-size: var(--font-caption); white-space: pre-wrap; }
+.project-agent-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--foreground) 32%, transparent); z-index: 17; }
+.project-agent-backdrop[hidden] { display: none; }
+@media (min-width: 971px) { .app-shell.project-agent-open { padding-right: 400px; } .project-agent-open .display-bar { right: 400px; } }
+@media (max-width: 970px) { .project-agent-panel { width: min(400px, 100vw); } .project-agent-open-button span { display: none; } }
 .heading-primary-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
 .heading-primary-tools > select { width: auto; max-width: 100%; }
 .heading-query { display: flex; align-items: center; flex: 1; min-width: 160px; border: var(--stroke) solid var(--border); border-radius: var(--radius-control); padding-left: var(--space-3); }

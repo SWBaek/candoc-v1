@@ -5,16 +5,18 @@ import type { AnnotationRect, RoleAnnotationContext, RoleAnnotationGroup, RoleEl
 import type { RoleReviewProps, RoleReviewHandle } from './role-review';
 
 import { ProjectCodexLink, useProjectCodex } from './project-codex-settings';
+import { useProjectAgent } from './project-agent';
 const names: Record<string, string> = { header: '머리말', footer: '꼬리말', page_number: '페이지 번호', body: '본문', title: '제목', unknown: '미확정' };
 const styleBox = (rect: AnnotationRect) => ({ left: `${rect.left * 100}%`, top: `${rect.top * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%` });
 function overlaps(a: AnnotationRect, b: AnnotationRect) { return a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height; }
-export const RoleAnnotations = forwardRef<RoleReviewHandle, RoleReviewProps & { items: RoleElement[]; initialPage: number }>(function RoleAnnotations(props, ref) {
+export const RoleAnnotations = forwardRef<RoleReviewHandle, RoleReviewProps & { items: RoleElement[]; initialPage: number; initialRef?: string }>(function RoleAnnotations(props, ref) {
   const { document: doc, review, busy, onDirty, onNavigate, onMutate, items, initialPage } = props;
   const retained = doc.pages.filter(page => review.decisions.find(row => row.page === page.number)?.status !== 'excluded');
   const [pageNo, setPageNo] = useState(initialPage || retained[0]?.number || 0), [rect, setRect] = useState<AnnotationRect | null>(null), [comment, setComment] = useState(''), [drawing, setDrawing] = useState(false);
   const [context, setContext] = useState<RoleAnnotationContext | null>(null), [annotationId, setAnnotationId] = useState(''), [panel, setPanel] = useState(false), [error, setError] = useState(''), [pending, setPending] = useState(false);
   const { state: { settings: { model, effort } } } = useProjectCodex();
-  const [exceptions, setExceptions] = useState<Record<string, string[]>>({}), [activeRef, setActiveRef] = useState('');
+  const projectAgent = useProjectAgent();
+  const [exceptions, setExceptions] = useState<Record<string, string[]>>({}), [activeRef, setActiveRef] = useState(props.initialRef ?? '');
   const imageRef = useRef<HTMLImageElement>(null), canvasRef = useRef<HTMLDivElement>(null), inputRef = useRef<HTMLTextAreaElement>(null), panelRef = useRef<HTMLElement>(null), openerRef = useRef<HTMLButtonElement>(null), sequence = useRef(0), mounted = useRef(true);
   const [narrow, setNarrow] = useState(window.matchMedia('(max-width: 970px)').matches);
   const drag = useRef<{ id: number; x: number; y: number } | null>(null), latestRect = useRef<AnnotationRect | null>(null);
@@ -41,6 +43,11 @@ export const RoleAnnotations = forwardRef<RoleReviewHandle, RoleReviewProps & { 
   useEffect(() => { void load(); }, [review.revision]);
   useEffect(() => { if (!running) return; const timer = window.setInterval(() => { void load(); }, 700); return () => clearInterval(timer); }, [running]);
   useEffect(() => { onDirty(dirty, valid); }, [dirty, valid]);
+  useEffect(() => { projectAgent.select({ stage: 3, page: pageNo, refs: activeRef ? [activeRef] : [] }); }, [activeRef, pageNo, projectAgent.select]);
+  useEffect(() => {
+    const handler = (event: Event) => { const target = (event as CustomEvent<{ ref: string; page: number }>).detail; if (!items.some(item => item.ref === target.ref)) return; setPageNo(target.page); setActiveRef(target.ref); setDrawing(false); setPanel(false); };
+    globalThis.addEventListener('candoc-agent-locate', handler); return () => globalThis.removeEventListener('candoc-agent-locate', handler);
+  }, [items]);
   useEffect(() => () => onDirty(false, false), []);
   useEffect(() => { const media = window.matchMedia('(max-width: 970px)'), update = () => setNarrow(media.matches); media.addEventListener('change', update); return () => media.removeEventListener('change', update); }, []);
   // Native Tab elsewhere; the narrow response drawer alone contains focus.
@@ -142,7 +149,8 @@ export const RoleAnnotations = forwardRef<RoleReviewHandle, RoleReviewProps & { 
           {!!context?.annotations.length && <select aria-label="저장된 영역 주석" value={annotationId} disabled={busy || dirty} onChange={event => openAnnotation(event.target.value)}>{context.annotations.map(row => <option key={row.id} value={row.id}>{row.page}페이지 · {row.comment}</option>)}</select>}
           {annotation && <><div className="role-annotation-message"><strong>원본 {annotation.page}페이지에 남긴 요청</strong><p>{annotation.comment}</p><Button variant="ghost" disabled={dirty} onClick={() => openAnnotation(annotation.id)}>표시 영역으로 이동</Button><details><summary>예시 JSON {annotation.matches.length}개</summary>{annotation.matches.map(match => <p key={match.ref}>{items.find(item => item.ref === match.ref)?.text} · {match.ref}{match.locations.some(row => row.overlap < 1 - 1e-9) ? ' · 일부 겹침' : ''}</p>)}</details></div>
             <ProjectCodexLink />
-            <p className="role-scope-note">Agent에는 좌표·bbox·JSON 텍스트를 전달합니다. PNG는 사람의 원문 확인용입니다.</p><Button disabled={busy || pending || running || dirty || !model || !effort} onClick={() => void request()}>이 주석으로 Agent에 요청</Button>
+            <p className="role-scope-note">Agent에는 좌표·bbox·JSON 텍스트를 전달합니다. PNG는 사람의 원문 확인용입니다.</p><Button disabled={busy || dirty} onClick={() => { setPageNo(annotation.page); setActiveRef(''); projectAgent.attach(annotation); setPanel(false); }}>프로젝트 Agent에 영역 첨부</Button>
+            <details className="legacy-annotation-request"><summary>이전 단발 추천 · 호환 경로</summary><p className="role-scope-note">이 경로는 프로젝트 대화와 별개입니다. 이전 추천 이력을 대조할 때 사용하세요.</p><Button disabled={busy || pending || running || dirty || !model || !effort} onClick={() => void request()}>이 주석으로 Agent에 요청</Button></details>
           </>}
           {running && <div role="status"><p>유지 페이지의 문구·위치·분할 형태를 비교하고 있습니다…</p><Button variant="outline" onClick={() => { const current = context!.jobs.find(row => row.status === 'running')!; void call('/api/review/role-annotation-suggestions', 'DELETE', { id: current.id }).then(setContext).catch(e => setError(e.message)); }}>추천 생성 취소</Button></div>}
           {job?.error && <p role="alert">{job.error}</p>}{job?.status === 'cancelled' && <p>추천 생성을 취소했습니다. 주석은 보존됩니다.</p>}

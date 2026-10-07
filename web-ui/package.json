@@ -11,7 +11,8 @@
     "dev": "npm run build && npm start",
     "test": "node --test --test-concurrency=4 tests/*.test.mjs",
     "test:browser": "node tests/browser.mjs",
-    "test:codex": "node scripts/check-codex.mjs"
+    "test:codex": "node scripts/check-codex.mjs",
+    "test:agent-protocol": "node scripts/check-project-agent-protocol.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
